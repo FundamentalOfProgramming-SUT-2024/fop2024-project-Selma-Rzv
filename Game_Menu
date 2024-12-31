@@ -76,26 +76,33 @@ int main(int argc, char *argv[]) {
         choice1 = menu(win, COLS, LINES, choices1, 5, title1);
 
         switch (choice1) {
-            case 0:  //profile
-                {
-                    int choice0;
-                    do {
-                        choice0 = menu(win, COLS, LINES, choices5, 6, title5);
-                        switch(choice0) {
-                            case 0: //username
-                                break;
-                            case 1: //total score
-                                break;
-                            case 2: //# of golds
-                                break;
-                            case 3: //# of finished games
-                                break;
-                            case 4: //experience
-                                break;
-                        }
-                    } while (choice0 != 5); //back
-                }
-                break;
+                        case 0:  //profile
+                char username[50];
+                int number_of_golds, sum_of_scores, number_of_finished_games, experience;
+                int choice5 = 0;
+        
+                FILE *fptr;
+                char filename[100];
+                snprintf(filename, sizeof(filename), "/home/selma/Desktop/Project/Phase1/Users' Info/%s/info.txt", user); //filename creation
+                fptr = fopen(filename, "r");
+        
+                char header[132];
+                fgets(header, sizeof(header), fptr);
+                fgets(header, sizeof(header), fptr);
+                fscanf(fptr, "%s %d %d %d %d", username, &sum_of_scores, &number_of_golds, &number_of_finished_games, &experience);
+                fclose(fptr);
+        
+                char info1[100], info2[100], info3[100], info4[100], info5[100];
+                snprintf(info1, sizeof(info1), "Username: %s", username);
+                snprintf(info2, sizeof(info2), "Sum of Scores: %d", sum_of_scores);
+                snprintf(info3, sizeof(info3), "Number of Golds: %d", number_of_golds);
+                snprintf(info4, sizeof(info4), "Number of Finished Games: %d", number_of_finished_games);
+                snprintf(info5, sizeof(info5), "Experience: %d", experience);
+        
+                char *choices5[] = {info1, info2, info3, info4, info5, "Back"};
+                choice5 = menu(win, COLS, LINES, choices5, 6, title5);
+                if (choice5 == 5) break; //back entered
+                break;   
 
             case 1:  //start a New Game
 
