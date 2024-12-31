@@ -1,0 +1,188 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <time.h>
+#include <ncurses.h>
+#include <locale.h>
+
+struct game {
+    int level;
+    char color[20];
+};
+typedef struct game Game;
+
+int menu(WINDOW *win, int COLS, int LINES, char *choices[], int n_choices, char *title) {
+    int choice = 0;
+
+    keypad(win, TRUE);
+
+    while (1) {
+        wclear(win);
+        box(win, 0, 0);
+    
+        mvwprintw(win, LINES / 2 - 3, COLS / 2 - strlen(title) / 2, "%s", title);
+
+        for (int i = 0; i < n_choices; ++i) {
+            if (i == choice)
+                wattron(win, A_REVERSE);
+            mvwprintw(win, LINES / 2 - 1 + i, COLS / 2 - strlen(choices[i]) / 2, "%s", choices[i]);
+            if (i == choice)
+                wattroff(win, A_REVERSE);
+        }
+
+        wrefresh(win);
+        int ch = wgetch(win);
+        if (ch == KEY_UP)
+            choice = (choice == 0) ? n_choices - 1 : choice - 1;
+        else if (ch == KEY_DOWN)
+            choice = (choice == n_choices - 1) ? 0 : choice + 1;
+        else if (ch == 10)  //it is enter key
+            break;
+    }
+    return choice;
+}
+
+int main(int argc, char *argv[]) {
+    setlocale(LC_ALL, "");
+    initscr();
+    noecho();
+    cbreak();
+    keypad(stdscr, TRUE);
+    curs_set(0);
+
+    WINDOW *win = newwin(LINES, COLS, 0, 0);
+    refresh();
+
+    char *choices1[] = {"Profile", "Start a New Game", "Continue the Last Game", "Score's Table", "Settings"};
+    char *choices2[] = {"Easy", "Medium", "Hard", "Back"};
+    char *choices3[] = {"White", "Blue", "Green", "Red", "Yellow", "Magenta", "Cyan", "Back"};
+    char *choices4[] = {"Music 1", "Music 2", "Music 3", "Back"};
+    char *choices5[] = {"Username", "Sum of Scores", "Number of Golds", "Number of Finished Games", "Experience", "Back"};
+    char *choices6[] = {"Game Difficulty Level", "Character Appearance", "Music", "Back"};
+    
+    char *title1 = "~~~ Game Menu ~~~";
+    char *title2 = "-- Game Levels --";
+    char *title3 = "@ Character Appearance @";
+    char *title4 = "^ Music ^";
+    char *title5 = "* Profile *";
+    char *title6 = "# Settings #";
+
+    Game game = {0};
+
+    int choice1;
+
+    do {
+        choice1 = menu(win, COLS, LINES, choices1, 5, title1);
+
+        switch (choice1) {
+            case 0:  //profile
+                {
+                    int choice0;
+                    do {
+                        choice0 = menu(win, COLS, LINES, choices5, 6, title5);
+                        switch(choice0) {
+                            case 0: //username
+                                break;
+                            case 1: //total score
+                                break;
+                            case 2: //# of golds
+                                break;
+                            case 3: //# of finished games
+                                break;
+                            case 4: //experience
+                                break;
+                        }
+                    } while (choice0 != 5); //back
+                }
+                break;
+
+            case 1:  //start a New Game
+
+                break;
+
+            case 2:  //continue the Last Game
+
+                break;
+
+            case 3:  //score's Table
+
+                break;
+
+            case 4:  //settings
+                {
+                    int choice4;
+                    do {
+                        choice4 = menu(win, COLS, LINES, choices6, 4, title6);
+                        switch (choice4) {
+                            case 0:  //difficulty Level
+                                {
+                                    int difficulty;
+                                    do {
+                                        difficulty = menu(win, COLS, LINES, choices2, 4, title2);
+                                        switch (difficulty) {
+                                            case 0:
+                                                game.level = 1;  //easy
+                                                break;
+                                            case 1:
+                                                game.level = 2;  //medium
+                                                break;
+                                            case 2:
+                                                game.level = 3;  //hard
+                                                break;
+                                        }
+                                    } while (difficulty != 3); //back
+                                }
+                                break;
+
+                            case 1:  //character color
+                                {
+                                    int color_choice;
+                                    do {
+                                        color_choice = menu(win, COLS, LINES, choices3, 8, title3);
+                                        switch (color_choice) {
+                                            case 0:
+                                                strcpy(game.color, "White");
+                                                break;
+                                            case 1:
+                                                strcpy(game.color, "Blue");
+                                                break;
+                                            case 2:
+                                                strcpy(game.color, "Green");
+                                                break;
+                                            case 3:
+                                                strcpy(game.color, "Red");
+                                                break;
+                                            case 4:
+                                                strcpy(game.color, "Yellow");
+                                                break;
+                                            case 5:
+                                                strcpy(game.color, "Magenta");
+                                                break;
+                                            case 6:
+                                                strcpy(game.color, "Cyan");
+                                                break;
+                                        }
+                                    } while (color_choice != 7); //back
+                                }
+                                break;
+
+                            case 2:  //music
+                                {
+                                    int music_choice;
+                                    do {
+                                        music_choice = menu(win, COLS, LINES, choices4, 4, title4);
+
+                                    } while (music_choice != 3); //back
+                                }
+                                break;
+                        }
+                    } while (choice4 != 3); //back
+                }
+                break;
+        }
+    } while (choice1 != 4);
+
+    endwin();
+    return 0;
+}
