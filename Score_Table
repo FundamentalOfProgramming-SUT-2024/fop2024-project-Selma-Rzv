@@ -1,0 +1,137 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ncurses.h>
+
+typedef struct {
+    char username[50];
+    int sum_of_scores;
+    int number_of_golds;
+    int number_of_finished_games;
+    int experience;
+    int rank;
+    char Special_Name[50];
+} Player;
+
+int main() {
+    initscr();
+    start_color();
+
+    init_pair(1, COLOR_WHITE, COLOR_BLACK);
+    init_pair(2, COLOR_BLUE, COLOR_WHITE);
+    init_pair(3, COLOR_BLACK, COLOR_YELLOW);
+    init_pair(4, COLOR_BLACK, COLOR_CYAN);
+    init_pair(5, COLOR_MAGENTA, COLOR_WHITE);
+
+
+    int num_players = 4;
+
+    Player players[num_players];
+
+    for (int i = 0; i < num_players; i++) {
+        FILE *fptr;
+        char filename[12];
+        snprintf(filename, sizeof(filename), "user%d.txt", i + 1); //filename creation
+
+        fptr = fopen(filename, "r");
+        if (fptr == NULL) {
+            perror("Error opening file");
+            endwin();
+            return 1;
+        }
+
+        //skip to the main content
+        char header[132];
+        fgets(header, sizeof(header), fptr); //skip the 1st line
+        fgets(header, sizeof(header), fptr); //skip the 2nd line
+
+        //player data
+        if (fscanf(fptr, "%s %d %d %d %d", players[i].username, &players[i].sum_of_scores, &players[i].number_of_golds, &players[i].number_of_finished_games, &players[i].experience) != 5) {
+            perror("Error reading player data");
+            fclose(fptr);
+            endwin();
+            return 1;
+        }
+        fclose(fptr);
+    }
+
+    //calculation of ranks
+    for (int i = 0; i < num_players; i++) {
+        players[i].rank = 1;
+        for (int j = 0; j < num_players; j++) {
+            if (players[j].sum_of_scores > players[i].sum_of_scores) {
+                players[i].rank++;
+            }
+        }
+    }
+
+    //printing the data table using printw
+    //header
+    attron(COLOR_PAIR(4));
+    printw("Rank | Username | Score | Earned Golds | Number of Finished Games | Experience (in minutes)\n");
+    attroff(COLOR_PAIR(4));
+    attron(COLOR_PAIR(5));
+    printw("___________________________________________________________________________________________\n-------------------------------------------------------------------------------------------\n");
+    attroff(COLOR_PAIR(5));
+    attron(COLOR_PAIR(1));
+
+
+    for (int i = num_players - 1; i >= 0; i--) {
+        if (players[i].rank == 1) {
+            attron(COLOR_PAIR(3));
+            attron(A_BOLD);
+            printw(" # \n## \n # \n #       %s      %d        %d                     %d                       %d          \n # \n # \n###\n\n", 
+                players[i].username, 
+                players[i].sum_of_scores, 
+                players[i].number_of_golds, 
+                players[i].number_of_finished_games, 
+                players[i].experience);
+            attroff(COLOR_PAIR(3));
+            attroff(A_BOLD);
+        } 
+        
+        else if (players[i].rank == 2) {
+            attron(COLOR_PAIR(3));
+            attron(A_BOLD);
+            printw("###\n  #\n  #\n###      %s      %d        %d                     %d                       %d          \n#  \n#  \n###\n\n", 
+                players[i].username, 
+                players[i].sum_of_scores, 
+                players[i].number_of_golds, 
+                players[i].number_of_finished_games, 
+                players[i].experience);
+            attroff(COLOR_PAIR(3));
+            attroff(A_BOLD);
+        } 
+        
+        else if (players[i].rank == 3) {
+            attron(COLOR_PAIR(3));
+            attron(A_BOLD);
+            printw("###\n  #\n  #\n###      %s      %d        %d                     %d                       %d          \n  #\n  #\n###\n\n", 
+                players[i].username, 
+                players[i].sum_of_scores,
+                players[i].number_of_golds, 
+                players[i].number_of_finished_games, 
+                players[i].experience);
+            attroff(COLOR_PAIR(3));
+            attroff(A_BOLD);
+        }
+        
+        else { 
+            attron(COLOR_PAIR(1));
+            printw("  %d      %s      %d        %d                     %d                         %d          \n", 
+                players[i].rank, 
+                players[i].username, 
+                players[i].sum_of_scores, 
+                players[i].number_of_golds, 
+                players[i].number_of_finished_games, 
+                players[i].experience);
+            attroff(COLOR_PAIR(1));
+        }
+    }
+
+    refresh();
+    getch();
+    endwin();
+
+    return 0;
+}
