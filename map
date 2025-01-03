@@ -4,8 +4,7 @@
 #include <stdbool.h>
 #include <math.h>
 
-
-#define MAX_ELEMENTS 10 // Maximum number of doors, windows, and pillars per room
+#define MAX_ELEMENTS 10
 #define MIN_ROOMS 6
 #define MAX_ROOMS 16
 #define MAP_SIZEy 41
@@ -32,7 +31,6 @@ typedef struct {
     int x, y;
 } Door;
 
-
 int random_10() {
     return rand() % 2;
 }
@@ -41,11 +39,18 @@ int get_random_number(int min, int max) {
     return rand() % (max - min + 1) + min;
 }
 
-int do_rooms_intersect(Room rm1, Room rm2) {
-    int d = sqrt(((rm1.center_x - rm2.center_x) * (rm1.center_x - rm2.center_x)) + ((rm1.center_y - rm2.center_y) * (rm1.center_y - rm2.center_y)));
-    int s1 = sqrt((rm1.width * rm1.width) + (rm1.length * rm1.length));
-    int s2 = sqrt((rm2.width * rm2.width) + (rm2.length * rm2.length));
-    return (d <= (s1 + s2) / 2);
+bool do_rooms_intersect(Room rm1, Room rm2) {
+    int left1 = rm1.center_x - rm1.length / 2;
+    int right1 = rm1.center_x + rm1.length / 2;
+    int top1 = rm1.center_y - rm1.width / 2;
+    int bottom1 = rm1.center_y + rm1.width / 2;
+    
+    int left2 = rm2.center_x - rm2.length / 2;
+    int right2 = rm2.center_x + rm2.length / 2;
+    int top2 = rm2.center_y - rm2.width / 2;
+    int bottom2 = rm2.center_y + rm2.width / 2;
+
+    return !(right1 <= left2 || left1 >= right2 || bottom1 <= top2 || top1 >= bottom2);
 }
 
 void room_builder(Room *rooms, int *num_rooms, char map[MAP_SIZEx][MAP_SIZEy]) {
@@ -73,15 +78,15 @@ void room_builder(Room *rooms, int *num_rooms, char map[MAP_SIZEx][MAP_SIZEy]) {
 
             // room walls
             for (int x = left; x <= right; x++) {
-                map[x][top] = '_';    //top wall
-                map[x][bottom] = '_'; //bottom wall
+                map[x][top] = '_';    // top wall
+                map[x][bottom] = '_'; // bottom wall
             }
             for (int y = top; y <= bottom; y++) {
-                map[left][y] = '|';  //left wall
-                map[right][y] = '|'; //right wall
+                map[left][y] = '|';  // left wall
+                map[right][y] = '|'; // right wall
             }
 
-            //fill room with '.'
+            // fill room with '.'
             for (int x = left + 1; x < right; x++) {
                 for (int y = top + 1; y < bottom; y++) {
                     map[x][y] = '.';
@@ -103,30 +108,30 @@ void window_builder(char map[MAP_SIZEx][MAP_SIZEy], Room *room) {
     int bottom = room->center_y + room->width / 2;
 
     for (int n = 0; n < room->num_windows; n++) {
-        if (random_10()) { //for horizontal walls
+        if (random_10()) { // for horizontal walls
             int x = get_random_number(left, right);
-            if (random_10()) { //top wall
-                if (map[x][top] == '|' || map[x][top] == '_') { //replace walls only
+            if (random_10()) { // top wall
+                if (map[x][top] == '|' || map[x][top] == '_') { // replace walls only
                     map[x][top] = '=';
                     room->windows[n][0] = x;
                     room->windows[n][1] = top;
                 }
-            } else { //bottom wall
+            } else { // bottom wall
                 if (map[x][bottom] == '|' || map[x][bottom] == '_') {
                     map[x][bottom] = '=';
                     room->windows[n][0] = x;
                     room->windows[n][1] = bottom;
                 }
             }
-        } else { //for vertical walls
+        } else { // for vertical walls
             int y = get_random_number(top, bottom);
-            if (random_10()) { //left wall
+            if (random_10()) { // left wall
                 if (map[left][y] == '|' || map[left][y] == '_') {
                     map[left][y] = '=';
                     room->windows[n][0] = left;
                     room->windows[n][1] = y;
                 }
-            } else { //right wall
+            } else { // right wall
                 if (map[right][y] == '|' || map[right][y] == '_') {
                     map[right][y] = '=';
                     room->windows[n][0] = right;
@@ -149,7 +154,6 @@ void pillar_builder(char map[MAP_SIZEx][MAP_SIZEy], Room *room) {
     int max_attempts = 100;
     while (placed_pillars < room->num_pillars && max_attempts > 0) {
         max_attempts--;
-        //random coordinates inside the room
         int x = get_random_number(left + 1, right - 1);
         int y = get_random_number(top + 1, bottom - 1);
 
@@ -160,14 +164,13 @@ void pillar_builder(char map[MAP_SIZEx][MAP_SIZEy], Room *room) {
             placed_pillars++;
         }
     }
-
 }
 
-void staircase_builder (char map[MAP_SIZEx][MAP_SIZEy]) {
+void staircase_builder(char map[MAP_SIZEx][MAP_SIZEy]) {
     int x = get_random_number(0, MAP_SIZEx - 1);
     int y = get_random_number(0, MAP_SIZEy - 1);
 
-    if (map[x][y] = '.') {
+    if (map[x][y] == '.') {
         map[x][y] = 'S';
         return;
     } else {
@@ -176,34 +179,27 @@ void staircase_builder (char map[MAP_SIZEx][MAP_SIZEy]) {
 }
 
 void path_and_door_builder(char map[MAP_SIZEx][MAP_SIZEy], Room *rooms, int num_rooms) {
-    // Function to create paths and place doors between rooms
-
     for (int i = 0; i < num_rooms - 1; i++) {
-        // getting the position of the first door in the ith room
-        int x1_pos = get_random_number(rooms[i].center_x - rooms[i].width / 2, rooms[i].center_x + rooms[i].width / 2);
-        int y1_pos = get_random_number(rooms[i].center_y - rooms[i].length / 2, rooms[i].center_y + rooms[i].length / 2);
-        // the same thing for the (i + 1)th room
-        int x2_pos = get_random_number(rooms[i + 1].center_x - rooms[i + 1].width / 2, rooms[i + 1].center_x + rooms[i + 1].width / 2);
-        int y2_pos = get_random_number(rooms[i + 1].center_y - rooms[i + 1].length / 2, rooms[i + 1].center_y + rooms[i + 1].length / 2);
+        int x1_pos = get_random_number(rooms[i].center_x - rooms[i].length / 2, rooms[i].center_x + rooms[i].length / 2);
+        int y1_pos = get_random_number(rooms[i].center_y - rooms[i].width / 2, rooms[i].center_y + rooms[i].width / 2);
+        int x2_pos = get_random_number(rooms[i + 1].center_x - rooms[i + 1].length / 2, rooms[i + 1].center_x + rooms[i + 1].length / 2);
+        int y2_pos = get_random_number(rooms[i + 1].center_y - rooms[i + 1].width / 2, rooms[i + 1].center_y + rooms[i + 1].width / 2);
 
-        // ensure door positions are on the room's wall
-        if (x1_pos == rooms[i].center_x - rooms[i].width / 2 || x1_pos == rooms[i].center_x + rooms[i].width / 2) {
-            y1_pos = get_random_number(rooms[i].center_y - rooms[i].length / 2, rooms[i].center_y + rooms[i].length / 2);
+        if (x1_pos == rooms[i].center_x - rooms[i].length / 2 || x1_pos == rooms[i].center_x + rooms[i].length / 2) {
+            y1_pos = get_random_number(rooms[i].center_y - rooms[i].width / 2, rooms[i].center_y + rooms[i].width / 2);
         } else {
-            x1_pos = get_random_number(rooms[i].center_x - rooms[i].width / 2, rooms[i].center_x + rooms[i].width / 2);
+            x1_pos = get_random_number(rooms[i].center_x - rooms[i].length / 2, rooms[i].center_x + rooms[i].length / 2);
         }
 
-        if (x2_pos == rooms[i + 1].center_x - rooms[i + 1].width / 2 || x2_pos == rooms[i + 1].center_x + rooms[i + 1].width / 2) {
-            y2_pos = get_random_number(rooms[i + 1].center_y - rooms[i + 1].length / 2, rooms[i + 1].center_y + rooms[i + 1].length / 2);
+        if (x2_pos == rooms[i + 1].center_x - rooms[i + 1].length / 2 || x2_pos == rooms[i + 1].center_x + rooms[i + 1].length / 2) {
+            y2_pos = get_random_number(rooms[i + 1].center_y - rooms[i + 1].width / 2, rooms[i + 1].center_y + rooms[i + 1].width / 2);
         } else {
-            x2_pos = get_random_number(rooms[i + 1].center_x - rooms[i + 1].width / 2, rooms[i + 1].center_x + rooms[i + 1].width / 2);
+            x2_pos = get_random_number(rooms[i + 1].center_x - rooms[i + 1].length / 2, rooms[i + 1].center_x + rooms[i + 1].length / 2);
         }
 
-        // initial start and ending points
         map[x1_pos][y1_pos] = '+';
         map[x2_pos][y2_pos] = '+';
 
-        // creating a path between these positions
         int index_x = x1_pos;
         int index_y = y1_pos;
 
@@ -218,50 +214,127 @@ void path_and_door_builder(char map[MAP_SIZEx][MAP_SIZEy], Room *rooms, int num_
             if (map[index_x][index_y] == ' ') {
                 map[index_x][index_y] = '#';
             } else if (map[index_x][index_y] == '|' || map[index_x][index_y] == '_' || map[index_x][index_y] == '=') {
-                map[index_x][index_y] = '+'; // place a door when you reach a wall
-            } else if (map[index_x][index_y] == '.' || map[index_x][index_y] == 'O' || map[index_x][index_y] == 'S') {
-                //inside a room, make no change
-                continue;
+                map[index_x][index_y] = '+'; 
             }
         }
     }
 }
 
-int main() {
-    srand(time(NULL));
-    char map[MAP_SIZEx][MAP_SIZEy];
+int is_staircase_in_room(int staircase_x, int staircase_y, Room *rooms, int num_rooms) {
+    for (int i = 0; i < num_rooms; i++) {
+        int left = rooms[i].center_x - rooms[i].length / 2;
+        int right = rooms[i].center_x + rooms[i].length / 2;
+        int top = rooms[i].center_y - rooms[i].width / 2;
+        int bottom = rooms[i].center_y + rooms[i].width / 2;
 
+        if (staircase_x >= left && staircase_x <= right && staircase_y >= top && staircase_y <= bottom) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+
+void floor_builder(int floor) {
+    char map[MAP_SIZEx][MAP_SIZEy];
     Room rooms[MAX_ROOMS];
     int num_rooms = 0;
 
-    //initializing the map to be empty ' '
-    for (int i = 0; i < MAP_SIZEx; i++) {
-        for (int j = 0; j < MAP_SIZEy; j++) {
-            map[i][j] = ' ';
-        }
-    }
-
-    room_builder(rooms, &num_rooms, map);
-
-    for (int i = 0; i < num_rooms; i++) {
-        window_builder(map, &rooms[i]);
-        pillar_builder(map, &rooms[i]);
-    }
-
-    staircase_builder(map);
-    path_and_door_builder(map, rooms, num_rooms);
-
-    FILE *file = fopen("map.txt", "w");
-    if (file != NULL) {
-        for (int y = 0; y < MAP_SIZEy; y++) {
-            for (int x = 0; x < MAP_SIZEx; x++) {
-                fprintf(file, "%c", map[x][y] ? map[x][y] : ' ');
+    if (floor == 1) {
+        for (int i = 0; i < MAP_SIZEx; i++) {
+            for (int j = 0; j < MAP_SIZEy; j++) {
+                map[i][j] = ' ';
             }
-            fprintf(file, "\n");
+        }
+
+        room_builder(rooms, &num_rooms, map);
+
+        for (int i = 0; i < num_rooms; i++) {
+            window_builder(map, &rooms[i]);
+            pillar_builder(map, &rooms[i]);
+        }
+
+        int stair_x, stair_y;
+        staircase_builder(map);
+        path_and_door_builder(map, rooms, num_rooms);
+
+        FILE *file = fopen("map1.txt", "w");
+        if (file != NULL) {
+            for (int y = 0; y < MAP_SIZEy; y++) {
+                for (int x = 0; x < MAP_SIZEx; x++) {
+                    fprintf(file, "%c", map[x][y] ? map[x][y] : ' ');
+                }
+                fprintf(file, "\n");
+            }
+            fclose(file);
+            printf("Map has been printed to map1.txt\n");
+        }
+    } else {
+        FILE *file = fopen("map1.txt", "r");
+        char temp_map[MAP_SIZEx][MAP_SIZEy];
+
+        for (int i = 0; i < MAP_SIZEx; i++) {
+            for (int j = 0; j < MAP_SIZEy; j++) {
+                temp_map[i][j] = fgetc(file);
+            }
         }
         fclose(file);
-        printf("Map has been printed to map.txt\n");
-    }
 
+        int staircase_x = -1, staircase_y = -1;
+        for (int i = 0; i < MAP_SIZEx; i++) {
+            for (int j = 0; j < MAP_SIZEy; j++) {
+                if (temp_map[i][j] == 'S') {
+                    staircase_x = i;
+                    staircase_y = j;
+                    break;
+                }
+            }
+        }
+
+
+        while (is_staircase_in_room(staircase_x, staircase_y, rooms, num_rooms) == 1) {
+            //empty ' ' map
+            for (int i = 0; i < MAP_SIZEx; i++) {
+                for (int j = 0; j < MAP_SIZEy; j++) {
+                    map[i][j] = ' ';
+                }
+            }
+            room_builder(rooms, &num_rooms, map);
+        }
+
+        for (int i = 0; i < num_rooms; i++) {
+            window_builder(map, &rooms[i]);
+            pillar_builder(map, &rooms[i]);
+        }
+
+        map[staircase_x][staircase_y] = 'S';
+        path_and_door_builder(map, rooms, num_rooms);
+
+        char filename[20];
+        sprintf(filename, "map%d.txt", floor);
+        FILE *new_file = fopen(filename, "w");
+        if (new_file != NULL) {
+            for (int y = 0; y < MAP_SIZEy; y++) {
+                for (int x = 0; x < MAP_SIZEx; x++) {
+                    fprintf(new_file, "%c", map[x][y]);
+                }
+                fprintf(new_file, "\n");
+            }
+            fclose(new_file);
+            printf("Map for floor %d has been printed to %s\n", floor, filename);
+        }
+    }
+}
+
+
+
+int main () {
+    srand(time(NULL));
+
+    int floor = 1;
+    while (floor <= 4) {
+        floor_builder(floor);
+        floor++;
+    }
     return 0;
 }
