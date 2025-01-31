@@ -153,27 +153,20 @@ void treasure(char map[MAP_SIZEx][MAP_SIZEy], Room2 *rooms, int *num_rooms) {
 }
 
 
-// void unvisible_doors(char map[MAP_SIZEx][MAP_SIZEy], char unvisible_door[MAP_SIZEx][MAP_SIZEy]) {
-//     int num_unvis_doors = 2;
-//     int n = 0;  
-//     int try = 0;
+void unvisible_doors(char map[MAP_SIZEx][MAP_SIZEy], char unvisible_door[MAP_SIZEx][MAP_SIZEy], Room2 *rooms, int num_rooms) {
+    int num_unvis_doors = 5;
+    int n = 0;
 
-//     while (n < num_unvis_doors || try < 100) {
-//         for (int i = 1; i < MAP_SIZEx - 1; i++) {
-//             for (int j = 1; j < MAP_SIZEy - 1; j++) {  
-//                 if ((map[i][j] == '_' || map[i][j] == '|') && 
-//                     (map[i - 1][j] == '#' || map[i + 1][j] == '#' || map[i][j - 1] == '#' || map[i][j + 1] == '#')) { 
-//                     unvisible_door[i][j] = 1;
-//                     n++;
-//                     if (n >= num_unvis_doors) break;
-//                 } else {
-//                     try++;
-//                 }
-//             }
-//             if (n >= num_unvis_doors) break;
-//         }
-//     }
-// }
+    while (n < num_unvis_doors) {
+        if (rooms[n].num_doors > 1) {
+            int door = get_random_number(0, rooms[n].num_doors - 1);
+            int x = rooms[n].doors[door][0];
+            int y = rooms[n].doors[door][1];
+            unvisible_door[y][x] = 1;
+        }
+        n++;
+    }
+}
 
 
 void window_builder(char map[MAP_SIZEx][MAP_SIZEy], Room2 *room) {
@@ -624,14 +617,14 @@ void save_rooms(const char *filename, Room2 rooms[], int num_rooms, char traps[M
             }
         }
     }
-    // fprintf(file, "\nUnvisible Doors:");
-    // for (int y = 0; y < MAP_SIZEx; y++) {
-    //     for (int x = 0; x < MAP_SIZEy; x++) {
-    //         if (unvisible_door[y][x] == 1) {
-    //             fprintf(file, " (%d, %d)", x, y);
-    //         }
-    //     }
-    // }
+    fprintf(file, "\nUnvisible Doors:");
+    for (int y = 0; y < MAP_SIZEx; y++) {
+        for (int x = 0; x < MAP_SIZEy; x++) {
+            if (unvisible_door[y][x] == 1) {
+                fprintf(file, " (%d, %d)", x, y);
+            }
+        }
+    }
     
     fclose(file);
 }
