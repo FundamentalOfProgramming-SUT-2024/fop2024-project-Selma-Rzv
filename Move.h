@@ -1717,15 +1717,19 @@ void move_player_continuously(char temp_map[LINES][COLS], char map[LINES][COLS],
 
 void read_room_info(const char *filename, Room *rooms, int *num_rooms, char traps[LINES][COLS], char unvisible_door[LINES][COLS]) {
     FILE *file = fopen(filename, "r");
-
+    if (!file) {
+        perror("Error opening file");
+        return;
+    }
 
     char line[256];
-    int room_index = -1; // Initialize to -1 instead of 0 to avoid initial increment issue
+    int room_index = -1;
     *num_rooms = 0;
 
-    // Initialize traps array to all zeros
+    // Initialize traps and unvisible_door arrays to all zeros
     memset(traps, 0, sizeof(char) * LINES * COLS);
-    
+    memset(unvisible_door, 0, sizeof(char) * LINES * COLS);
+
     while (fgets(line, sizeof(line), file)) {
         if (strstr(line, "Room")) {
             room_index++;
@@ -1735,47 +1739,38 @@ void read_room_info(const char *filename, Room *rooms, int *num_rooms, char trap
             rooms[room_index].num_windows = 0;
             (*num_rooms)++;
         } else if (strstr(line, "Center")) {
-            sscanf(line, "Center: (%d, %d)", &rooms[room_index].center.x, &rooms[room_index].center.y);
+            sscanf(line, "Center: (%d, %d)", &rooms[room_index].center.y, &rooms[room_index].center.x);
         } else if (strstr(line, "Dimensions")) {
-            sscanf(line, "Dimensions: %dx%d", &rooms[room_index].dimensions.x, &rooms[room_index].dimensions.y);
+            sscanf(line, "Dimensions: %dx%d", &rooms[room_index].dimensions.y, &rooms[room_index].dimensions.x);
         } else if (strstr(line, "Type")) {
             sscanf(line, "Type: %d", &rooms[room_index].type);
         } else if (strstr(line, "Visibility")) {
             sscanf(line, "Visibility: %d", &rooms[room_index].visibility);
         } else if (strstr(line, "Demon")) {
-            sscanf(line, "Demon: %d (%d, %d)", &rooms[room_index].demon.type,
-                                               &rooms[room_index].demon.position.x,
-                                               &rooms[room_index].demon.position.y);
+            sscanf(line, "Demon: %d (%d, %d)", &rooms[room_index].demon.type, &rooms[room_index].demon.position.x, &rooms[room_index].demon.position.y);
+        } else if (strstr(line, "Traps:")) {
+            int x, y;
+            char *token = strtok(line, " ");
+            while (token != NULL) {
+                if (sscanf(token, "(%d, %d)", &x, &y) == 2) {
+                    traps[x][y] = 1;
+                }
+                token = strtok(NULL, " ");
+            }
+        } else if (strstr(line, "Unvisible Doors:")) {
+            int x, y;
+            char *token = strtok(line, " ");
+            while (token != NULL) {
+                if (sscanf(token, "(%d, %d)", &x, &y) == 2) {
+                    unvisible_door[x][y] = 1;
+                }
+                token = strtok(NULL, " ");
+            }
         }
     }
 
-    // Now read the trap coordinates after the room details
-    while (fgets(line, sizeof(line), file)) {
-        if (strstr(line, "Traps: ")) {
-            int x, y;
-            char *token = strtok(line, " ");
-            while (token != NULL) {
-                if (sscanf(token, "(%d, %d)", &x, &y) == 2) {
-                    traps[y][x] = 1; // Mark trap coordinates in traps array
-                }
-                token = strtok(NULL, " ");
-            }
-        }
-    }
-    while (fgets(line, sizeof(line), file)) {
-        if (strstr(line, "Unvisible Doors: ")) {
-            int x, y;
-            char *token = strtok(line, " ");
-            while (token != NULL) {
-                if (sscanf(token, "(%d, %d)", &x, &y) == 2) {
-                    unvisible_door[y][x] = 1;
-                }
-                token = strtok(NULL, " ");
-            }
-        }
-    }
-    
     fclose(file);
+    refresh();
 }
 
 void demon(char map[LINES][COLS], Room *rooms, int x_ply, int y_ply, int i, user *player) {
@@ -2012,6 +2007,33 @@ void yellow_trasure_room (char map[LINES][COLS]) {
     }
 }
 
+void visibility(Room *rooms, int x, int y, int num_rooms, char map[LINES][COLS]) {
+    start_color();
+    init_pair(300, COLOR_BLACK, COLOR_BLACK);
+
+    int current_room = find_room(x, y, map, num_rooms, rooms);
+    if (current_room != -1) {
+        rooms[current_room].visibility = 1;
+
+    }
+    for (int i =0; i < num_rooms; i++) {
+        if (rooms[i].visibility) {
+            mvprintw(3, i, "%d", i);
+            int start_x = rooms[i].center.x - rooms[i].dimensions.y / 2;
+            int end_x = rooms[i].center.x + rooms[i].dimensions.y / 2;
+            int start_y = rooms[i].center.y - rooms[i].dimensions.x / 2;
+            int end_y = rooms[i].center.y + rooms[i].dimensions.x / 2;
+
+            for (int x = start_x; x <= end_x; x++) {
+                for (int y = start_y; y <= end_y; y++) {
+                    mvaddch(x, y, map[x][y]);
+                }
+            }
+        }
+    }
+        
+    refresh(); 
+}
 // void winning(char map[LINES][COLS], int new_score, int new_gold, int new_experience) {
 //     FILE *file = fopen("info.txt", "r+");
 //     if (file == NULL) {
