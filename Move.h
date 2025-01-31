@@ -1251,7 +1251,15 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
             *x = new_x;
             *y = new_y;
             mvprintw(*y, *x, "@");
-        } else if (map[new_y][new_x] != '|' && map[new_y][new_x] != '_' && map[new_y][new_x] != 'O' 
+        } else if ((map[new_y][new_x] == '|' || map[new_y][new_x] == '_') && (map[new_y + 1][new_x] == '#' || map[new_y - 1][new_x] == '#' || map[new_y][new_x - 1] == '#' || map[new_y][new_x + 1] == '#')) {
+            mvprintw(*y, *x, "%c", temp_map[*y][*x] == '@' ? '.' : temp_map[*y][*x]);
+            temp_map[*y][*x] = map[*y][*x];
+            *x = new_x;
+            *y = new_y;
+            mvprintw(*y, *x, "@");
+        }
+        
+        else if (map[new_y][new_x] != '|' && map[new_y][new_x] != '_' && map[new_y][new_x] != 'O' 
                 && map[new_y][new_x] != '=' && map[new_y][new_x] != ' ' && map[new_y][new_x] != '@') {
             // Regular movement
             mvprintw(*y, *x, "%c", temp_map[*y][*x] == '@' ? '.' : temp_map[*y][*x]);
