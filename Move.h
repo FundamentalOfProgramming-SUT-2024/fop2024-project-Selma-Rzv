@@ -1131,36 +1131,16 @@ void treasure_room(char treasure_room_map[LINES][COLS], user *player, weapon *wp
 
 int find_room(int x, int y, char map[LINES][COLS], int num_rooms, Room *rooms) {
     for (int i = 0; i < num_rooms; i++) {
-        if (x > rooms[i].center.x - rooms[i].dimensions.y / 2 &&
-            x < rooms[i].center.x + rooms[i].dimensions.y / 2 &&
-            y > rooms[i].center.y - rooms[i].dimensions.x / 2 &&
-            y < rooms[i].center.y + rooms[i].dimensions.x / 2) {
+        if (x > rooms[i].center.y - rooms[i].dimensions.x / 2 &&
+            x < rooms[i].center.y + rooms[i].dimensions.x / 2 &&
+            y > rooms[i].center.x - rooms[i].dimensions.y / 2 &&
+            y < rooms[i].center.x + rooms[i].dimensions.y / 2) {
             return i;
         }
     }
     return -1;
 }
 
-void visibility(Room *rooms, int x, int y, int num_rooms, char map[LINES][COLS]) {
-    init_pair(100, COLOR_BLACK, COLOR_BLACK);
-    int current_room = find_room(x, y, map, num_rooms, rooms);
-    if (current_room != -1) {
-        rooms[current_room].visibility = 1;
-    } else {
-        for (int i = 0; i < LINES; i++) {
-            for (int j = 0; j < COLS; j++) {
-                if (j >= (x - 5) && j <= (x + 5) && i >= (y - 5) && i <= (y + 5)) {
-                    mvaddch(i, j, map[i][j]);
-                } else {
-                    attron(COLOR_PAIR(1));
-                    mvaddch(i + 2, j, ' ');
-                    attroff(COLOR_PAIR(1));
-                }
-            }
-        }
-    }
-    refresh();
-}
 
 void move_player(Mix_Music* current_music, char username[6], Room *rooms, int num_rooms, int next, int prev, int *door_password, char temp_map[LINES][COLS], char map[LINES][COLS], char traps[LINES][COLS], int *x, int *y, int ch, user *player, int current_floor, char pass_doors_locked[LINES][COLS], char fallen_weapons[LINES][COLS], int spell_effect_count, char treasure_room_map[LINES][COLS], char unvisible_door[LINES][COLS], weapon *wpn, int *lost) {
     static time_t password_start_time;
@@ -1770,10 +1750,12 @@ void read_room_info(const char *filename, Room *rooms, int *num_rooms, char trap
     }
 
     fclose(file);
+
+    // Refresh to display all printed details
     refresh();
 }
 
-void demon(char map[LINES][COLS], Room *rooms, int x_ply, int y_ply, int i, user *player) {
+void demon(char map[LINES][COLS], Room *rooms, int x_ply, int y_ply, int i, user *player, int count) {
     char original_char = map[rooms[i].demon.position.y][rooms[i].demon.position.x];
     char demons[5] = {'D', 'F', 'G', 'S', 'U'};
 
@@ -1811,6 +1793,7 @@ void demon(char map[LINES][COLS], Room *rooms, int x_ply, int y_ply, int i, user
         player->life -= 1; 
     }
 }
+
 
 void weapon_properties(user *player, weapon *wpn) {
     switch (player->weapon_type) {
@@ -2458,17 +2441,22 @@ int start_game (int color, char username[], int continued) {
 
             //move demon when in room
             int current_room = find_room(x, y, map, num_rooms, rooms);
+            mvprintw(1, 1, "%d", current_room);
             if (current_room != -1) {
-                if (rooms[current_room].demon.life > 0) {
+                if (1) {
                     char *type_dem[5] = {"Deamon", "Fire Breathing Monster", "Giant", "Snake", "Undead"};
                     
                     init_pair(1, COLOR_RED, COLOR_BLACK);
                     attron(COLOR_PAIR(1) | A_REVERSE);
                     
-                    mvprintw(LINES - 1, COLS - 90, "%s Life: %10d", type_dem[rooms[current_room].demon.type], rooms[current_room].demon.life);
+                    mvprintw(LINES - 1, COLS - 90, "%s Life: %10d", type_dem[rooms[current_room].demon.type - 1], rooms[current_room].demon.life);
                     attroff(COLOR_PAIR(1) | A_REVERSE);
 
-                    demon(map, rooms, x, y, current_room, &player);
+                    // if (type_dem[rooms[current_room].demon.type - 1] == 'G' || type_dem[rooms[current_room].demon.type - 1] == 'U') {
+                    //     limited_move = 1;
+                    //     count_move++;
+                    // }
+                    demon(map, rooms, x, y, current_room, &player, count_move);
                     refresh();
                 }
                 rooms[current_room].visibility = 1;
