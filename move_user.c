@@ -1276,14 +1276,14 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
             temp_map[*y][*x] = map[*y][*x];
             *x = new_x;
             *y = new_y;
-            mvprintw(*y, *x, "@");
+            mvprintw(*y, *x, "\U0001FBC6");
         } else if ((map[new_y][new_x] == '|' || map[new_y][new_x] == '_') && (map[new_y + 1][new_x] == '#' || map[new_y - 1][new_x] == '#' || map[new_y][new_x - 1] == '#' || map[new_y][new_x + 1] == '#')) {
             mvprintw(*y, *x, "%c", temp_map[*y][*x] == '@' ? '.' : temp_map[*y][*x]);
             map[new_y][new_x] = '?';
             temp_map[*y][*x] = map[*y][*x];
             *x = new_x;
             *y = new_y;
-            mvprintw(*y, *x, "@");
+            mvprintw(*y, *x, "\U0001FBC6");
             refresh();
         }
              
@@ -1294,7 +1294,7 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
             temp_map[*y][*x] = map[*y][*x];
             *x = new_x;
             *y = new_y;
-            mvprintw(*y, *x, "@");
+            mvprintw(*y, *x, "\U0001FBC6");
 
             //treasure room
             if (map[new_y][new_x] == '*') {
@@ -1513,18 +1513,31 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
 
                 //check if the user has master key
                 if (player->masterkey) { //user can pass
-                    mvprintw(*y, *x, "%c", temp_map[*y][*x]);
-                    temp_map[*y][*x] = map[*y][*x];
-                    *x = new_x;
-                    *y = new_y;
-                    pass_doors_locked[new_y][new_x] = 0;
-                    player->masterkey--; //used
-                    attron(COLOR_PAIR(2));
-                    move(1, 0);
-                    clrtoeol();
-                    mvprintw(0, 5, "%-30s", "You used your master key!");
-                    refresh();
-                    attroff(COLOR_PAIR(1));
+                    //there is a 10% chance the key might break!
+                    int chance = get_random_number(1, 10);
+                    if (chance < 10 && chance >= 0) {
+                        mvprintw(*y, *x, "%c", temp_map[*y][*x]);
+                        temp_map[*y][*x] = map[*y][*x];
+                        *x = new_x;
+                        *y = new_y;
+                        pass_doors_locked[new_y][new_x] = 0;
+                        player->masterkey--; //used
+                        attron(COLOR_PAIR(2));
+                        move(1, 0);
+                        clrtoeol();
+                        mvprintw(0, 5, "%-30s", "You used your master key!");
+                        refresh();
+                        attroff(COLOR_PAIR(1));
+                    } else {
+                        pass_doors_locked[new_y][new_x] = 1;
+                        display_screen(screendata, LINES, COLS);
+                        attron(COLOR_PAIR(2));
+                        move(1, 0);
+                        clrtoeol();
+                        mvprintw(0, 5, "%-30s", "Key breaked while using!");
+                        refresh();
+                        attroff(COLOR_PAIR(1));
+                    }
                 } else {
                     if (pass_screen(*door_password)) { 
                         display_screen(screendata, LINES, COLS);
@@ -2264,7 +2277,7 @@ int main() {
             }
         }
 
-        mvprintw(y, x, "@");
+        mvprintw(y, x, "\U0001FBC6");
         temp_map[y][x] = map[y][x]; 
         refresh();
 
@@ -2298,8 +2311,10 @@ int main() {
                 ScreenChar **screendata = NULL;
                 save_screen(&screendata, &LINES, &COLS);
                 int food_num = food_menu(stdscr, COLS, LINES, 4, player); // Food selection menu
+                display_screen(screendata, LINES, COLS);
+                getch();
 
-                if (food_num > 0 && food_counts[food_num] > 0) {
+                if (food_counts[food_num] > 0) {
                     food_counts[food_num]--; // Decrease selected food count
                     player.food--;
 
@@ -2311,12 +2326,21 @@ int main() {
                         player.life = LIFE;
                         speed_effect_count = 1;
                     } else if (food_num == 0) {
-                        player.life = LIFE;
+                        int chance = get_random_number(1, 10);
+                        if (chance >= 0 && chance <= 8) {
+                            player.life = LIFE;
+                        } else {
+
+                            player.life--;
+                            attron(COLOR_PAIR(100));
+                            mvprintw(0, COLS / 2 - 10, "%30s", "Oops! you ate rotten food!");
+                            attron(COLOR_PAIR(100));
+                        }
                     }
 
                     hungerLevel = MAX_HUNGER; // Reset hunger
+                    refresh();
                 }
-                display_screen(screendata, LINES, COLS);
 
             } else if (speed_effect_count) {
                 if (speed_effect_count < 10) {
@@ -2572,7 +2596,7 @@ int main() {
                 rooms[current_room].visibility = 1;
             }
 
-            mvprintw(y, x, "@");
+            mvprintw(y, x, "\U0001FBC6");
             attron(COLOR_PAIR(2));
             mvprintw(LINES - 1, 1, "Life: %d      Food: %d      Gold: %d      Weapons: %d     Health: %d      Master key: %d",
                     player.life, player.food, player.gold, player.mace + player.dagger+ player.magic_wand+ player.normal_arrow+ player.sword, player.health, player.masterkey);
