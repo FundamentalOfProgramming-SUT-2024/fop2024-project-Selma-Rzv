@@ -29,6 +29,7 @@
 #define COLOR_ORANGE 80
 #define COLOR_GREEN_PASS 90
 #define COLOR_GOLD 100
+#define NAME_WIDTH 30
 
 Mix_Music *current_bgm = NULL;
 bool is_music_playing = false; 
@@ -403,7 +404,6 @@ int food_menu(WINDOW *win, int COLS, int LINES, int n_choices, user player) {
     curs_set(0);
 
     while (1) {
-        // Clear window and draw box
         wclear(win);
         box(win, 0, 0);
         char title[20] = "Food Menu";
@@ -417,8 +417,12 @@ int food_menu(WINDOW *win, int COLS, int LINES, int n_choices, user player) {
                 wattron(win, A_REVERSE);
             }
 
-            mvwprintw(win, LINES / 2 - 2 + i, COLS / 2 - 20, "%d. %s             - Count: %3d |", i + 1, food_names[i], food_counts[i]);
-            wattroff(win, A_REVERSE);
+            mvwprintw(win, LINES / 2 - 2 + i, COLS / 2 - 20, "%d. %-*.*s", i + 1, NAME_WIDTH, NAME_WIDTH, food_names[i]);
+            mvwprintw(win, LINES / 2 - 2 + i, COLS / 2 + 10, "count: %3d |", food_counts[i]);
+
+            if (i == highlight) {
+                wattroff(win, A_REVERSE);
+            }
         }
 
         int c = wgetch(win);
@@ -446,7 +450,7 @@ int food_menu(WINDOW *win, int COLS, int LINES, int n_choices, user player) {
 
         wrefresh(win);
     }
-    
+
     curs_set(1);
     return choice;
 }
@@ -915,7 +919,7 @@ void treasure_room(char treasure_room_map[LINES][COLS], user *player, weapon *wp
         } else if (ch == 'e') {
             ScreenChar **screendata = NULL;
             save_screen(&screendata, &LINES, &COLS);
-            int food_num = food_menu(stdscr, COLS, LINES, 4, *player); //food to eat
+            int food_num = food_menu(stdscr, COLS, LINES, 3, *player); //food to eat
             food_counts[food_num]--;
             player->food--;
             hungerLevel = MAX_HUNGER;
@@ -2310,7 +2314,7 @@ int main() {
             } else if (ch == 'e') {
                 ScreenChar **screendata = NULL;
                 save_screen(&screendata, &LINES, &COLS);
-                int food_num = food_menu(stdscr, COLS, LINES, 4, player); // Food selection menu
+                int food_num = food_menu(stdscr, COLS, LINES, 3, player); // Food selection menu
                 display_screen(screendata, LINES, COLS);
                 getch();
 
@@ -2613,12 +2617,6 @@ int main() {
                 life_decrease = 0;
             }
 
-            // for (int n = 0; n < 3; n++) {
-            //     if (time_food[n] > FOOD_CONVERSION_RATE) {
-            //         food_counts[n]--;
-            //         food_counts[0]++;
-            //     }
-            // }
             
             if (lost) {
                 clear();
