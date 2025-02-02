@@ -13,6 +13,7 @@
 
 
 #define MAX_TRAPS 100
+#define MIN_TRAPS 10
 #define MAX_ROOMS 15
 #define MAX_HUNGER 30
 #define TIME_INTERVAL 2
@@ -29,6 +30,10 @@
 #define COLOR_ORANGE 80
 #define COLOR_GREEN_PASS 90
 #define COLOR_GOLD 100
+#define COLOR_GRAY 110
+#define COLOR_BLACK_GOLD 120
+#define COLOR_LIGHT_BLUE 130
+#define COLOR_PINK 140
 #define NAME_WIDTH 30
 
 Mix_Music *current_bgm = NULL;
@@ -205,7 +210,8 @@ int pass_screen(int password) {
 
     init_pair(1, COLOR_YELLOW, COLOR_BLACK);
     init_pair(2, COLOR_RED, COLOR_BLACK);
-    init_pair(3, COLOR_MAGENTA, COLOR_BLACK);
+    init_pair(3, COLOR_ORANGE, COLOR_BLACK);
+    init_pair(4, COLOR_GREEN, COLOR_BLACK);
 
     int is_reverse = get_random_number(0, 1);
     if (is_reverse) {
@@ -223,7 +229,9 @@ int pass_screen(int password) {
         input[4] = '\0';
 
         if (strcmp(input, password_str) == 0) {
+            attron(COLOR_PAIR(4));
             mvprintw(LINES / 2 + 1, (COLS - 25) / 2, "Password correct!");
+            attroff(COLOR_PAIR(4));
             refresh();
             sleep(2);
             endwin();
@@ -314,9 +322,8 @@ void color (char map[LINES][COLS], char pass_doors_locked[LINES][COLS]) {
     init_pair(5, COLOR_CYAN, COLOR_BLACK);
     init_pair(6, COLOR_DARK_PINK, COLOR_BLACK);
     init_pair(7, COLOR_PURPLE, COLOR_BLACK);
-    init_pair(8, COLOR_GOLD, COLOR_BLACK);
 
-    for (int i = 0; i < LINES; i++) {
+    for (int i = 2; i < LINES; i++) {
         for (int j = 0; j < COLS; j++) {
             if (map[i][j] == '@') {
                 if (pass_doors_locked[i][j] == 0) {
@@ -348,10 +355,6 @@ void color (char map[LINES][COLS], char pass_doors_locked[LINES][COLS]) {
                 attron(COLOR_PAIR(7));
                 mvprintw(i, j, "%c", map[i][j]);
                 attroff(COLOR_PAIR(7));
-            } else if (map[i][j] == 'K') {
-                attron(COLOR_PAIR(8));
-                mvprintw(i, j, "%c", map[i][j]);
-                attroff(COLOR_PAIR(8));
             }
             else {
                 mvprintw(i, j, "%c", map[i][j]);
@@ -651,7 +654,7 @@ void move_player2(char ch, int *x, int *y, char map[LINES][COLS], user *player, 
             if (ch2 == 'y') {
                 player->gold++;
                 map[new_y][new_x] = ' ';
-                attron(COLOR_PAIR(2));
+                attron(COLOR_PAIR(1));
                 move(1, 0);
                 clrtoeol();
                 mvprintw(0, 5, "%-30s", "You picked up a golden coin!");
@@ -1171,7 +1174,7 @@ void battle_room() {
     endwin(); 
 }
 
-void move_player(Mix_Music* current_music, char username[6], Room *rooms, int num_rooms, int *next, int *prev, int *door_password, char temp_map[LINES][COLS], char map[LINES][COLS], char traps[LINES][COLS], int *x, int *y, int ch, user *player, int current_floor, char pass_doors_locked[LINES][COLS], char fallen_weapons[LINES][COLS], int spell_effect_count, char treasure_room_map[LINES][COLS], char unvisible_door[LINES][COLS], weapon *wpn, int *lost, int *is_in_enchant_room) {
+void move_player(Mix_Music* current_music, char username[6], Room *rooms, int num_rooms, int *next, int *prev, int *door_password, char temp_map[LINES][COLS], char map[LINES][COLS], int *x, int *y, int ch, user *player, int current_floor, char pass_doors_locked[LINES][COLS], char fallen_weapons[LINES][COLS], int spell_effect_count, char treasure_room_map[LINES][COLS], char unvisible_door[LINES][COLS], weapon *wpn, int *lost, int *is_in_enchant_room) {
     static time_t password_start_time;
     int new_x = *x, new_y = *y;
     char ch2;
@@ -1183,6 +1186,8 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
         clear_password_display();
         password_start_time = 0;
     }
+
+    int chance_stepping_on_trap = get_random_number(MIN_TRAPS, MAX_TRAPS);
 
     if (player->velocity == 2) {
         switch (ch) {
@@ -1264,13 +1269,22 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
         }
     }
 
-    if (traps[new_y][new_x == 1]) {
+    if (chance_stepping_on_trap < 11 && map[new_y][new_x] != '#' && map[new_y][new_x] != '|' && map[new_y][new_x] != '_' && map[new_y][new_x] != 'O' 
+                && map[new_y][new_x] != '=' && map[new_y][new_x] != ' ' && map[new_y][new_x] != '@') {
         player->life--;
         if (player->life <= 0) {
             *lost = 1;
         }
         map[new_y][new_x] = '^'; //marked as trap
+        attron(COLOR_PAIR(2));
+        mvprintw(0, 5, "%-30s", "Oops! you stepped on a trap!");
         refresh();
+        attroff(COLOR_PAIR(2));
+        refresh();
+        ScreenChar **screendata = NULL;
+        save_screen(&screendata, &LINES, &COLS);
+        battle_room();
+        display_screen(screendata, LINES, COLS);
     }
     //check if the new position is valid and not a wall or other block
     if (new_x >= 0 && new_x < COLS && new_y >= 0 && new_y < LINES) {
@@ -1499,15 +1513,6 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
                 display_password(*door_password, time(NULL));
                 password_start_time = time(NULL);  // Start the timer for displaying the password
             }
-            
-            if (traps[new_y][new_x] == 1) {
-                player->health--;
-                ScreenChar **screendata = NULL;
-                save_screen(&screendata, &LINES, &COLS);
-                battle_room();
-                display_screen(screendata, LINES, COLS);
-            }
-
 
         } else if (map[new_y][new_x] == '@') { //password door
            //if the door is locked and the user has not attempted to open it before
@@ -1595,24 +1600,20 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
     for (int n = 0; n < 3; n++) {
         if (time_food[n] != 0) { // If special food exists
             time_food[n]++;
-            mvprintw(5, 1, "%d", time_food[n]);
 
             // Convert special food to normal food after some time (e.g., 10 turns)
             if (time_food[n] >= 10 && food_counts[n] > 0) {
-                mvprintw(6, 1, "YES");
                 food_counts[n + 1]--;  // Remove special food
                 food_counts[0]++;  // Increase normal food count
                 time_food[n] = 0;  // Reset the timer
             }
-
-            mvprintw(0, COLS / 2 + n, "%d ", time_food[n]); // Display timer
         }
     }
 
     refresh();
 }
 
-void move_player_continuously(char temp_map[LINES][COLS], char map[LINES][COLS], char traps[LINES][COLS], int *x, int *y, int ch, user *player, int current_floor, char pass_doors_locked[LINES][COLS]) {
+void move_player_continuously(char temp_map[LINES][COLS], char map[LINES][COLS], int *x, int *y, int ch, user *player, int current_floor, char pass_doors_locked[LINES][COLS]) {
     int new_x = *x, new_y = *y;
     static int door_password = 0;
     static time_t password_start_time = 0;
@@ -1709,10 +1710,6 @@ void move_player_continuously(char temp_map[LINES][COLS], char map[LINES][COLS],
                 map[new_y][new_x] = '.';
             }
 
-            if (traps[new_y][new_x] == 1) {
-                player->health--;
-            }
-
             if (map[new_y][new_x] == '@') {
                 if (pass_doors_locked[new_y][new_x] == 1) {
                     ScreenChar **screendata = NULL;
@@ -1753,7 +1750,7 @@ void move_player_continuously(char temp_map[LINES][COLS], char map[LINES][COLS],
     }
 }
 
-void read_room_info(const char *filename, Room *rooms, int *num_rooms, char traps[LINES][COLS], char unvisible_door[LINES][COLS]) {
+void read_room_info(const char *filename, Room *rooms, int *num_rooms, char unvisible_door[LINES][COLS]) {
     FILE *file = fopen(filename, "r");
     if (!file) {
         perror("Error opening file");
@@ -1763,9 +1760,6 @@ void read_room_info(const char *filename, Room *rooms, int *num_rooms, char trap
     char line[256];
     int room_index = -1;
     *num_rooms = 0;
-
-    // Initialize traps and unvisible_door arrays to all zeros
-    memset(traps, 0, sizeof(char) * LINES * COLS);
     memset(unvisible_door, 0, sizeof(char) * LINES * COLS);
 
     while (fgets(line, sizeof(line), file)) {
@@ -1786,15 +1780,6 @@ void read_room_info(const char *filename, Room *rooms, int *num_rooms, char trap
             sscanf(line, "Visibility: %d", &rooms[room_index].visibility);
         } else if (strstr(line, "Demon")) {
             sscanf(line, "Demon: %d (%d, %d)", &rooms[room_index].demon.type, &rooms[room_index].demon.position.x, &rooms[room_index].demon.position.y);
-        } else if (strstr(line, "Traps:")) {
-            int x, y;
-            char *token = strtok(line, " ");
-            while (token != NULL) {
-                if (sscanf(token, "(%d, %d)", &x, &y) == 2) {
-                    traps[x][y] = 1;
-                }
-                token = strtok(NULL, " ");
-            }
         } else if (strstr(line, "Unvisible Doors:")) {
             int x, y;
             char *token = strtok(line, " ");
@@ -1806,10 +1791,7 @@ void read_room_info(const char *filename, Room *rooms, int *num_rooms, char trap
             }
         }
     }
-
     fclose(file);
-
-    // Refresh to display all printed details
     refresh();
 }
 
@@ -2023,15 +2005,18 @@ void handle_long_range_weapon(int x, int y, char map[LINES][COLS], Room rooms[],
 
 void display_map_with_unicode(char map[LINES][COLS]) {
     setlocale(LC_ALL, "");
+    start_color();
 
     const char *ancient_key = "\U000025B3";
+    init_color(COLOR_GOLD, 800, 600, 200);
+    init_pair(8, COLOR_GOLD, COLOR_BLACK);
 
     for (int i = 0; i < LINES; i++) {
         for (int j = 0; j < COLS; j++) {
             if (map[i][j] == 'K') {
+                attron(COLOR_PAIR(8));
                 mvaddstr(i, j, ancient_key);
-            } else {
-                mvprintw(i, j, "%c", map[i][j]);
+                attroff(COLOR_PAIR(8));
             }
         }
     }
@@ -2041,7 +2026,7 @@ void display_map_with_unicode(char map[LINES][COLS]) {
 
 void visibility(Room *rooms, int x, int y, int num_rooms, char map[LINES][COLS], char explored_map[LINES][COLS]) {
     int current_room = find_room(x, y, map, num_rooms, rooms);
-    if (current_room != -1) {
+    if (current_room != -1 && rooms[current_room].type != 3) {
         rooms[current_room].visibility = 1;
 
     }
@@ -2055,7 +2040,6 @@ void visibility(Room *rooms, int x, int y, int num_rooms, char map[LINES][COLS],
 
             for (int x = start_x; x <= end_x; x++) {
                 for (int y = start_y; y <= end_y; y++) {
-                    //mvaddch(x, y, map[x][y]);
                     explored_map[x][y] = map[x][y];
                 }
             }
@@ -2072,21 +2056,28 @@ void print_explored_rooms(Room *rooms, int num_rooms, char map[LINES][COLS], int
     init_color(COLOR_PURPLE, 600, 0, 600);
     init_color(COLOR_ORANGE, 900, 500, 0);
     init_color(COLOR_DARK_PINK, 600, 0, 450);
+    init_color(COLOR_GREEN_PASS, 124, 252, 0);
+    init_color(COLOR_GRAY, 300, 300, 300);
+    init_color(COLOR_BLACK_GOLD, 350, 350, 350);
+    init_color(COLOR_LIGHT_BLUE, 135, 206, 400);
 
     init_pair(1, COLOR_RED, COLOR_BLACK);
-    init_pair(2, COLOR_GREEN, COLOR_BLACK);
+    init_pair(2, COLOR_GREEN_PASS, COLOR_BLACK);
     init_pair(3, COLOR_YELLOW, COLOR_BLACK);
     init_pair(4, COLOR_BLUE, COLOR_BLACK);
     init_pair(5, COLOR_CYAN, COLOR_BLACK);
     init_pair(6, COLOR_DARK_PINK, COLOR_BLACK);
     init_pair(7, COLOR_PURPLE, COLOR_BLACK);
+    init_pair(8, COLOR_GRAY, COLOR_BLACK);
+    init_pair(9, COLOR_BLACK_GOLD, COLOR_BLACK);\
+    init_pair(10, COLOR_LIGHT_BLUE, COLOR_BLACK);
 
     // Check if the player is in a room
     int num = find_room(x_ply, y_ply, map, num_rooms, rooms);
     char direction[4][2] = {{0, 1}, {1, 0}, {0, -1}, {-1, 0}};
     if (num == -1) {
         for (int i = 0; i < 4; i++) {
-            if (map[y_ply + direction[i][1]][x_ply + direction[i][0]] == '#') {
+            if (map[y_ply + direction[i][1]][x_ply + direction[i][0]] == '#' || map[y_ply + direction[i][1]][x_ply + direction[i][0]] == '@') {
                 for (int n = 0; n < 6; n++) {
                     if (direction[i][1] == 0) {
                         if (map[y_ply + direction[i][1]][x_ply + direction[i][0] + n] == '#') {
@@ -2101,7 +2092,28 @@ void print_explored_rooms(Room *rooms, int num_rooms, char map[LINES][COLS], int
             }
         }
 
-    } else {
+    } else if (rooms[num].type == 3) {
+        int left = rooms[num].center.x - rooms[num].dimensions.y / 2;
+        int right = rooms[num].center.x + rooms[num].dimensions.y / 2;
+        int top = rooms[num].center.y - rooms[num].dimensions.x / 2;
+        int bottom = rooms[num].center.y + rooms[num].dimensions.x / 2;  
+
+        for (int x = left; x <= right; x++) {
+            for (int y = top; y <= bottom; y++) {
+                explored_map[x][y] = ' ';
+            }
+        }
+
+        for (int x = x_ply - 2; x <= x_ply + 2; x++) {
+            for (int y = y_ply - 2; y <= y_ply + 2; y++) {
+                explored_map[y][x] = map[y][x];
+            }
+        }
+
+    }
+    
+    
+    else {
         rooms[num].visibility = 1;
     }
 
@@ -2117,7 +2129,7 @@ void print_explored_rooms(Room *rooms, int num_rooms, char map[LINES][COLS], int
                     mvprintw(i, j, "%c", explored_map[i][j]);
                     attroff(COLOR_PAIR(1));
                 }
-            } else if (explored_map[i][j] == 'g' || explored_map[i][j] == '$' || explored_map[i][j] == '*') {
+            } else if (explored_map[i][j] == '$' || explored_map[i][j] == '*') {
                 attron(COLOR_PAIR(3));
                 mvprintw(i, j, "%c", explored_map[i][j]);
                 attroff(COLOR_PAIR(3));
@@ -2137,7 +2149,21 @@ void print_explored_rooms(Room *rooms, int num_rooms, char map[LINES][COLS], int
                 attron(COLOR_PAIR(7));
                 mvprintw(i, j, "%c", explored_map[i][j]);
                 attroff(COLOR_PAIR(7));
-            } else {
+            } else if (explored_map[i][j] == ',') {
+                attron(COLOR_PAIR(8));
+                mvprintw(i, j, "%c", explored_map[i][j]);
+                attroff(COLOR_PAIR(8));
+            } else if (explored_map[i][j] == '~') {
+                attron(COLOR_PAIR(10));
+                mvprintw(i, j, "%c", explored_map[i][j]);
+                attroff(COLOR_PAIR(10));                
+            } else if (explored_map[i][j] == 'g') {
+                attron(COLOR_PAIR(9));
+                mvprintw(i, j, "%c", explored_map[i][j]);
+                attroff(COLOR_PAIR(9));      
+            }
+            
+            else {
                 mvprintw(i, j, "%c", explored_map[i][j]);
             }
         }
@@ -2167,6 +2193,8 @@ int main() {
     init_pair(1, COLOR_YELLOW, COLOR_BLACK);
     init_pair(5, COLOR_WHITE, COLOR_GREEN);
     init_pair(100, COLOR_RED, COLOR_BLACK);
+    init_color(COLOR_PINK, 1000, 700, 800);
+    init_pair(200, COLOR_PINK, COLOR_BLACK);
 
     int current_floor = 1;
     int keep_running = 1;
@@ -2202,7 +2230,7 @@ int main() {
     for (int floor = 1; floor <= 4;  floor++) {
         if (floor > 1) {
             attron(A_REVERSE);
-            mvprintw(0, COLS / 2 - 10, "You entered next floor!");
+            mvprintw(0, COLS - 20, "You entered next floor!");
             attroff(A_REVERSE);
         }
         clear();
@@ -2219,7 +2247,6 @@ int main() {
         int num_rooms = 0;
         char file_name1[50], file_name2[50];
         char demons2[LINES][COLS];
-        char traps[LINES][COLS];
         char fallen_weapons[LINES][COLS];
         char unvisible_door[LINES][COLS];
         char explored_map[LINES][COLS];
@@ -2229,17 +2256,9 @@ int main() {
                 explored_map[i][j] = ' ';
             }
         }
-
-
-        for (int i = 0; i < LINES; i++) {
-            for (int j = 0; j < COLS; j++) {
-                traps[i][j] = 0;
-            }
-        }
-
         
         sprintf(file_name1, "rooms_info_%d.txt", floor);
-        read_room_info(file_name1, rooms, &num_rooms, traps, unvisible_door);
+        read_room_info(file_name1, rooms, &num_rooms, unvisible_door);
 
         demon_properties(rooms, num_rooms);
 
@@ -2261,8 +2280,6 @@ int main() {
         }
 
         fclose(fptr);
-
-        //display_map_with_unicode(map);
 
         // for (int i = 0; i < LINES; i++) {
         //     for (int j = 0; j < COLS; j++) {
@@ -2302,9 +2319,10 @@ int main() {
             //visibility(rooms, x, y, num_rooms, map, explored_map);
             //print_explored_rooms(rooms, num_rooms, map, x, y, pass_doors_locked, explored_map);
             color(map, pass_doors_locked);
+            display_map_with_unicode(map);
             if (ch == 'f') { //continuous movements
                 ch = getch();
-                move_player_continuously(temp_map, map, traps, &x, &y, ch, &player, current_floor, pass_doors_locked);
+                move_player_continuously(temp_map, map, &x, &y, ch, &player, current_floor, pass_doors_locked);
             } else if (ch == 'i') {
                 ScreenChar **screendata = NULL;
                 save_screen(&screendata, &LINES, &COLS);
@@ -2316,7 +2334,6 @@ int main() {
                 save_screen(&screendata, &LINES, &COLS);
                 int food_num = food_menu(stdscr, COLS, LINES, 3, player); // Food selection menu
                 display_screen(screendata, LINES, COLS);
-                getch();
 
                 if (food_counts[food_num] > 0) {
                     food_counts[food_num]--; // Decrease selected food count
@@ -2423,7 +2440,7 @@ int main() {
                 fclose(file3);
 
                 sprintf(file_name1, "rooms_info_%d.txt", floor);
-                read_room_info(file_name1, rooms, &num_rooms, traps, unvisible_door);
+                read_room_info(file_name1, rooms, &num_rooms, unvisible_door);
                 FILE *file4 = fopen(file_name1, "w");
                 // Write back the updated room information, including the visibility field
                 for (int i = 0; i < num_rooms; i++) {
@@ -2449,63 +2466,63 @@ int main() {
             //weapon changing
             } else if (ch == 'w') {
                 player.weapon_type = 0;
-                attron(A_BOLD);
-                mvprintw(0, COLS / 2 - 30, "Weapon safely placed back in your bag!                                             ");
-                attroff(A_BOLD);
+                attron(COLOR_PAIR(200));
+                mvprintw(0, COLS / 2 - 35, "%50s", "Weapon safely placed back in your bag!");
+                attroff(COLOR_PAIR(200));
             } else if (ch == '1') {
                 if (!player.weapon_type) {
                     player.weapon_type = 1;
-                    attron(A_BOLD);
-                    mvprintw(0, COLS / 2 - 30, "Successfully switched to Mace!                                                    ");
-                    attroff(A_BOLD);
+                    attron(COLOR_PAIR(200));
+                    mvprintw(0, COLS / 2 - 35, "%50s","Successfully switched to Mace!");
+                    attroff(COLOR_PAIR(200));
                 } else {
-                    attron(A_BOLD);
-                    mvprintw(0, COLS / 2 - 30, "Please place your current weapon back in your bag before switching to another one!");
-                    attroff(A_BOLD);
+                    attron(COLOR_PAIR(200));
+                    mvprintw(0, COLS / 2 - 35, "%50s","Please place your current weapon back in your bag before switching to another one!");
+                    attroff(COLOR_PAIR(200));
                 }
             } else if (ch == '2') {
                 if (!player.weapon_type) {
                     player.weapon_type = 2;
-                    attron(A_BOLD);
-                    mvprintw(0, COLS / 2 - 30, "Successfully switched to Sword!                                                   ");
-                    attroff(A_BOLD);
+                    attron(COLOR_PAIR(200));
+                    mvprintw(0, COLS / 2 - 35, "%50s","Successfully switched to Sword!");
+                    attroff(COLOR_PAIR(200));
                 } else {
                     attron(A_BOLD);
-                    mvprintw(0, COLS / 2 - 30, "Please place your current weapon back in your bag before switching to another one!");
-                    attroff(A_BOLD);
+                    mvprintw(0, COLS / 2 - 35,"%50s","Please place your current weapon back in your bag before switching to another one!");
+                    attroff(COLOR_PAIR(200));
                 }
             } else if (ch == '3') {
                 if (!player.weapon_type) {
                     player.weapon_type = 3;
-                    attron(A_BOLD);
-                    mvprintw(0, COLS / 2 - 30, "Successfully switched to Normal Arrow!                                            ");
-                    attroff(A_BOLD);
+                    attron(COLOR_PAIR(200));
+                    mvprintw(0, COLS / 2 - 35, "%50s","Successfully switched to Normal Arrow!");
+                    attroff(COLOR_PAIR(200));
                 } else {
-                    attron(A_BOLD);
-                    mvprintw(0, COLS / 2 - 30, "Please place your current weapon back in your bag before switching to another one!");
-                    attroff(A_BOLD);
+                    attron(COLOR_PAIR(200));
+                    mvprintw(0, COLS / 2 - 35, "Please place your current weapon back in your bag before switching to another one!");
+                    attroff(COLOR_PAIR(200));
                 }
             } else if (ch == '4') {
                 if (!player.weapon_type) {
                     player.weapon_type = 4;
-                    attron(A_BOLD);
-                    mvprintw(0, COLS / 2 - 30, "Successfully switched to Dagger!                                                  ");
-                    attroff(A_BOLD);
+                    attron(COLOR_PAIR(200));
+                    mvprintw(0, COLS / 2 - 35, "%50s","Successfully switched to Dagger!");
+                    attroff(COLOR_PAIR(200));
                 } else {
-                    attron(A_BOLD);
-                    mvprintw(0, COLS / 2 - 30, "Please place your current weapon back in your bag before switching to another one!");
-                    attroff(A_BOLD);
+                    attron(COLOR_PAIR(200));
+                    mvprintw(0, COLS / 2 - 35, "%50s","Please place your current weapon back in your bag before switching to another one!");
+                    attroff(COLOR_PAIR(200));
                 }
             } else if (ch == '5') {
                 if (!player.weapon_type) {
                     player.weapon_type = 5;
-                    attron(A_BOLD);
-                    mvprintw(0, COLS / 2 - 30, "Successfully switched to Magic Wand!                                              ");
-                    attroff(A_BOLD);
+                    attron(COLOR_PAIR(200));
+                    mvprintw(0, COLS / 2 - 35, "%50s","Successfully switched to Magic Wand!");
+                    attroff(COLOR_PAIR(200));
                 } else {
-                    attron(A_BOLD);
-                    mvprintw(0, COLS / 2 - 30, "Please place your current weapon back in your bag before switching to another one!");
-                    attroff(A_BOLD);
+                    attron(COLOR_PAIR(200));
+                    mvprintw(0, COLS / 2 - 35, "%50s", "Please place your current weapon back in your bag before switching to another one!");
+                    attroff(COLOR_PAIR(200));
                 }
             }
             
@@ -2553,7 +2570,7 @@ int main() {
             }
 
             else { //single step movements
-                move_player(current_music, username, rooms, num_rooms, &next, &prev, &door_password, temp_map, map, traps, &x, &y, ch, &player, current_floor, pass_doors_locked, fallen_weapons, speed_effect_count, treasure_room_map, unvisible_door, &wpn, &lost, &is_in_enchant_room);
+                move_player(current_music, username, rooms, num_rooms, &next, &prev, &door_password, temp_map, map, &x, &y, ch, &player, current_floor, pass_doors_locked, fallen_weapons, speed_effect_count, treasure_room_map, unvisible_door, &wpn, &lost, &is_in_enchant_room);
                 if (next == 1) {
                     mvprintw(1, 1, "NEXT");
                     floor++;
@@ -2578,25 +2595,22 @@ int main() {
 
             //move demon when in room
             int current_room = find_room(x, y, map, num_rooms, rooms);
-            mvprintw(1, 1, "%d", current_room);
             if (current_room != -1) {
-                if (1) {
-                    char *type_dem[5] = {"Deamon", "Fire Breathing Monster", "Giant", "Snake", "Undead"};
-                    
-                    init_pair(1, COLOR_RED, COLOR_BLACK);
-                    attron(COLOR_PAIR(1) | A_REVERSE);
-                    
-                    mvprintw(LINES - 1, COLS - 90, "%s Life: %10d", type_dem[rooms[current_room].demon.type - 1], rooms[current_room].demon.life);
-                    attroff(COLOR_PAIR(1) | A_REVERSE);
+                char *type_dem[5] = {"Deamon", "Fire Breathing Monster", "Giant", "Snake", "Undead"};
+                
+                init_pair(1, COLOR_RED, COLOR_BLACK);
+                attron(COLOR_PAIR(1) | A_REVERSE);
+                
+                mvprintw(LINES - 1, COLS - 90, "%s Life: %10d", type_dem[rooms[current_room].demon.type - 1], rooms[current_room].demon.life);
+                attroff(COLOR_PAIR(1) | A_REVERSE);
 
-                    if (rooms[current_room].demon.type == 2 || rooms[current_room].demon.type == 4) {
-                        count_move++;
-                    } else {
-                        count_move = 0;
-                    }
-                    demon(map, rooms, x, y, current_room, &player, count_move);
-                    refresh();
+                if (rooms[current_room].demon.type == 2 || rooms[current_room].demon.type == 4) {
+                    count_move++;
+                } else {
+                    count_move = 0;
                 }
+                demon(map, rooms, x, y, current_room, &player, count_move);
+                refresh();
                 rooms[current_room].visibility = 1;
             }
 
@@ -2616,7 +2630,6 @@ int main() {
                 player.life--;
                 life_decrease = 0;
             }
-
             
             if (lost) {
                 clear();
