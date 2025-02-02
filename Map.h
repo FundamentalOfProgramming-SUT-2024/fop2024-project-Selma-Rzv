@@ -14,17 +14,16 @@
 
 #define MAX_ELEMENTS 10
 #define MIN_ROOMS 6
-#define MAX_ROOMS 12
+#define MAX_ROOMS 9
 #define MAX_PILLARS_IN_EACH_ROOM 4
 #define MAX_NUMBER_PASSWORD_DOORS 5
 #define MAX_NUMBER_SECRET_DOORS 5
 #define MAP_SIZEy 43
 #define MAP_SIZEx 183
-#define MIN_TRAPS 10
-#define MAX_TRAPS 30
 #define MIN_FOOD_IN_EACH_FLOOR 5
 #define MAX_FOOD_IN_EACH_FLOOR 15
-#define MAX_WEAPONS_IN_EACH_FLOOR 10
+#define MIN_WEAPONS_IN_EACH_FLOOR 30
+#define MAX_WEAPONS_IN_EACH_FLOOR 50
 #define MAX_SPELLS_IN_EACH_FLOOR 10
 #define MAX_GOLDS_IN_TREASURE_ROOM 20
 #define MAX_TRAPS_IN_TREASURE_ROOM 20
@@ -61,23 +60,22 @@ int random_10() {
     return rand() % 2;
 }
 
-
 bool do_rooms_intersect(Room2 rm1, Room2 rm2) {
-    int left1 = rm1.center_x - rm1.length / 2;
-    int right1 = rm1.center_x + rm1.length / 2;
-    int top1 = rm1.center_y - rm1.width / 2;
-    int bottom1 = rm1.center_y + rm1.width / 2;
+    int left1 = rm1.center_x - rm1.width / 2;
+    int right1 = rm1.center_x + rm1.width / 2;
+    int top1 = rm1.center_y - rm1.length / 2;
+    int bottom1 = rm1.center_y + rm1.length / 2;
 
-    int left2 = rm2.center_x - rm2.length / 2;
-    int right2 = rm2.center_x + rm2.length / 2;
-    int top2 = rm2.center_y - rm2.width / 2;
-    int bottom2 = rm2.center_y + rm2.width / 2;
+    int left2 = rm2.center_x - rm2.width / 2;
+    int right2 = rm2.center_x + rm2.width / 2;
+    int top2 = rm2.center_y - rm2.length / 2;
+    int bottom2 = rm2.center_y + rm2.length / 2;
 
-    return !(right1 + 9 < left2|| left1 > right2 + 9|| bottom1 + 9 < top2 || top1 > bottom2 + 9);
+    return !(right1 + 7 < left2|| left1 > right2 + 7|| bottom1 + 7 < top2 || top1 > bottom2 + 7);
 }
 
-void room_builder(Room2 *rooms, int *num_rooms, char map[MAP_SIZEx][MAP_SIZEy]) {
-    int room_count = get_random_number(MIN_ROOMS, MAX_ROOMS);
+void room_builder(Room2 *rooms, int *num_rooms, char map[MAP_SIZEx][MAP_SIZEy], int level) {
+    int room_count = get_random_number(MIN_ROOMS, MAX_ROOMS + level);
     int rooms_created = 0;
 
     while (room_count > 0 && rooms_created < MAX_ROOMS) {
@@ -101,7 +99,14 @@ void room_builder(Room2 *rooms, int *num_rooms, char map[MAP_SIZEx][MAP_SIZEy]) 
             int bottom = rooms[rooms_created].center_y + rooms[rooms_created].width / 2;
 
             // Assign a type (2 - Enchant, 3 - Nightmare, 4 - Regular) randomly
-            rooms[rooms_created].type = get_random_number(2, 4);
+            int m = get_random_number(0, 10);
+            if (m >= 0 && m <= 5) {
+                rooms[rooms_created].type  = 4;
+            } else if (m == 6 || m == 7 || m == 8) {
+                rooms[rooms_created].type = 2;
+            } else if (m == 9 || m == 10) {
+                rooms[rooms_created].type = 3;
+            }
 
             // room walls
             for (int x = left; x <= right; x++) {
@@ -142,7 +147,7 @@ void room_builder(Room2 *rooms, int *num_rooms, char map[MAP_SIZEx][MAP_SIZEy]) 
 
 void treasure(char map[MAP_SIZEx][MAP_SIZEy], Room2 *rooms, int *num_rooms) {
     int count  = 0;
-    while (count < 30) {
+    while (count < 2) {
         int x = get_random_number(1, MAP_SIZEx - 1);
         int y = get_random_number(1, MAP_SIZEy - 1);
         if (map[x][y] == '.' || map[x][y] == ',' || map[x][y] == '~') {
@@ -152,22 +157,27 @@ void treasure(char map[MAP_SIZEx][MAP_SIZEy], Room2 *rooms, int *num_rooms) {
     }
 }
 
-
 void unvisible_doors(char map[MAP_SIZEx][MAP_SIZEy], char unvisible_door[MAP_SIZEx][MAP_SIZEy], Room2 *rooms, int num_rooms) {
-    int num_unvis_doors = 5;
+    int num_unvis_doors = 3;
     int n = 0;
+    for (int y = 0; y < MAP_SIZEy; y++) {
+        for (int x = 0; x < MAP_SIZEx; x++) {
+            if (map[y][x] == '+') {
+                if (n < num_unvis_doors) {
+                    unvisible_door[y][x] = 1;
 
-    while (n < num_unvis_doors) {
-        if (rooms[n].num_doors > 1) {
-            int door = get_random_number(0, rooms[n].num_doors - 1);
-            int x = rooms[n].doors[door][0];
-            int y = rooms[n].doors[door][1];
-            unvisible_door[y][x] = 1;
+                    if (map[y - 1][x] == '_' || map[y + 1][x] == '_') {
+                        map[y][x] = '_';
+                        n++;
+                    } else if (map[y][x - 1] == '|' || map[y][x + 1] == '|') {
+                        map[y][x] = '|';
+                        n++;
+                    }
+                }
+            }
         }
-        n++;
     }
 }
-
 
 void window_builder(char map[MAP_SIZEx][MAP_SIZEy], Room2 *room) {
     room->num_windows = rand() % MAX_ELEMENTS;
@@ -236,35 +246,28 @@ void pillar_builder(char map[MAP_SIZEx][MAP_SIZEy], Room2 *room) {
     }
 }
 
-void staircase_builder(char map[MAP_SIZEx][MAP_SIZEy], bool* left_placed, bool* right_placed) {
+void staircase_builder(char map[MAP_SIZEx][MAP_SIZEy], bool* left_placed) {
     if (!(*left_placed)) {
         int x = get_random_number(1, MAP_SIZEx - 1);
         int y = get_random_number(1, MAP_SIZEy - 1);
 
-        if (map[x][y] == '.' || map[x][y] == '-' || map[x][y] == '~' || map[x][y] == ',') {
-            map[x][y] = '<';
+        if (map[y][x] == '.' || map[y][x] == '-' || map[y][x] == '~' || map[y][x] == ',') {
+            map[y][x] = '>';
             *left_placed = true;
         } else {
-            staircase_builder(map, left_placed, right_placed);
-        }
-    }
-
-    if (!(*right_placed)) {
-        int x = get_random_number(1, MAP_SIZEx - 1);
-        int y = get_random_number(1, MAP_SIZEy - 1);
-
-        if (map[x][y] == '.' || map[x][y] == '-' || map[x][y] == '~' || map[x][y] == ',') {
-            map[x][y] = '>';
-            *right_placed = true;
-        } else {
-            staircase_builder(map, left_placed, right_placed);
+            staircase_builder(map, left_placed);
         }
     }
 }
 
+void path_and_door_builder(char map[MAP_SIZEx][MAP_SIZEy], Room2 *rooms, int *num_rooms) {
+    const int MAX_ITERATIONS = 1000;
 
-void path_and_door_builder(char map[MAP_SIZEx][MAP_SIZEy], Room2 *rooms, int num_rooms) {
-    for (int i = 0; i < num_rooms - 1; i++) {
+    for (int i = 0; i < *num_rooms - 1; i++) {
+        if (rooms[i].length <= 0 || rooms[i].width <= 0 || rooms[i + 1].length <= 0 || rooms[i + 1].width <= 0) {
+            continue;
+        }
+
         int x1_pos = get_random_number(rooms[i].center_x - rooms[i].length / 2, rooms[i].center_x + rooms[i].length / 2);
         int y1_pos = get_random_number(rooms[i].center_y - rooms[i].width / 2, rooms[i].center_y + rooms[i].width / 2);
         int x2_pos = get_random_number(rooms[i + 1].center_x - rooms[i + 1].length / 2, rooms[i + 1].center_x + rooms[i + 1].length / 2);
@@ -282,6 +285,7 @@ void path_and_door_builder(char map[MAP_SIZEx][MAP_SIZEy], Room2 *rooms, int num
             x2_pos = get_random_number(rooms[i + 1].center_x - rooms[i + 1].length / 2, rooms[i + 1].center_x + rooms[i + 1].length / 2);
         }
 
+
         map[x1_pos][y1_pos] = '+';
         map[x2_pos][y2_pos] = '+';
 
@@ -294,13 +298,15 @@ void path_and_door_builder(char map[MAP_SIZEx][MAP_SIZEy], Room2 *rooms, int num
         if (rooms[i + 1].num_doors < MAX_DOORS) {
             rooms[i + 1].doors[rooms[i + 1].num_doors][0] = x2_pos;
             rooms[i + 1].doors[rooms[i + 1].num_doors][1] = y2_pos;
-            rooms[i + 1].num_doors++;
         }
 
         int index_x = x1_pos;
         int index_y = y1_pos;
+        int iteration_count = 0;
 
-        while (index_x != x2_pos || index_y != y2_pos) {
+        while ((index_x != x2_pos || index_y != y2_pos) && iteration_count < MAX_ITERATIONS) {
+            iteration_count++;
+
             if (index_x != x2_pos) {
                 if (index_y != y2_pos) {
                     index_y += (index_y < y2_pos) ? 1 : -1;
@@ -379,7 +385,6 @@ void fix_map(char map[MAP_SIZEx][MAP_SIZEy]) {
 void food(char map[MAP_SIZEx][MAP_SIZEy]) {
     int num_food = get_random_number(MIN_FOOD_IN_EACH_FLOOR, MAX_FOOD_IN_EACH_FLOOR);
     int i = 0;
-
     while (i < num_food) {
         int x = get_random_number(1, MAP_SIZEx - 1);
         int y = get_random_number(1, MAP_SIZEy - 1);
@@ -394,7 +399,6 @@ void food(char map[MAP_SIZEx][MAP_SIZEy]) {
 void gold_y(char map[MAP_SIZEx][MAP_SIZEy]) { //yellow gold
     int num_gold = get_random_number(MIN_FOOD_IN_EACH_FLOOR, MAX_FOOD_IN_EACH_FLOOR);
     int i = 0;
-
     while (i < num_gold) {
         int x = get_random_number(1, MAP_SIZEx - 1);
         int y = get_random_number(1, MAP_SIZEy - 1);
@@ -423,14 +427,13 @@ void gold_b(char map[MAP_SIZEx][MAP_SIZEy]) {
 }
 
 void weapon_placer(char map[MAP_SIZEx][MAP_SIZEy]) {
-    int num_weapons = get_random_number(1, MAX_WEAPONS_IN_EACH_FLOOR);
+    int num_weapons = get_random_number(MAX_WEAPONS_IN_EACH_FLOOR, MAX_WEAPONS_IN_EACH_FLOOR);
     int i = 0;
 
     while (i < num_weapons) {
         int x = get_random_number(1, MAP_SIZEx - 2);
         int y = get_random_number(1, MAP_SIZEy - 2);
 
-        // Ensure weapons are placed inside rooms ('.', '-', '~', ',')
         if (map[x][y] == '.' || map[x][y] == '-' || map[x][y] == '~' || map[x][y] == ',') {
             int choice = get_random_number(0, 4); // Select between different weapons
 
@@ -456,7 +459,19 @@ void weapon_placer(char map[MAP_SIZEx][MAP_SIZEy]) {
     }
 }
 
-void spell (char map[MAP_SIZEx][MAP_SIZEy], Room2 *rooms,  int num_rooms) {
+int find_room2(int x, int y, char map[MAP_SIZEx][MAP_SIZEy], int num_rooms, Room2 *rooms) {
+    for (int i = 0; i < num_rooms; i++) {
+        if (x >= rooms[i].center_x - rooms[i].length / 2 &&
+            x <= rooms[i].center_x + rooms[i].length / 2 &&
+            y >= rooms[i].center_y - rooms[i].width / 2 &&
+            y <= rooms[i].center_y + rooms[i].width / 2) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void spell (char map[MAP_SIZEx][MAP_SIZEy], Room2 *rooms,  int *num_rooms) {
     int num_spells = get_random_number(1, MAX_WEAPONS_IN_EACH_FLOOR);
     char choices[] = "hds"; //health, damage, speed
     int i = 0, j = 0;
@@ -473,31 +488,37 @@ void spell (char map[MAP_SIZEx][MAP_SIZEy], Room2 *rooms,  int num_rooms) {
     }
 
     int num = 0;
-    while (j < num_spells * 2) {
+    while (j < num_spells + 5) {
         int x = get_random_number(1, MAP_SIZEx - 1);
         int y = get_random_number(1, MAP_SIZEy - 1);
-        for (int n = 0; n < num_rooms; n++) {
+        for (int n = 0; n < *num_rooms; n++) {
             if (rooms[n].type == 2) {
                 int choice = get_random_number(0, 2);
                 if (map[x][y] == '.' || map[x][y] == '-' || map[x][y] == '~' || map[x][y] == ',') {
-                map[x][y] = choices[choice];
-                j++;
+                    map[x][y] = choices[choice];
+                    j++;
                 }
             }
         }
     }
-}
 
-int find_room2(int x, int y, char map[MAP_SIZEx][MAP_SIZEy], int num_rooms, Room2 *rooms) {
-    for (int i = 0; i < num_rooms; i++) {
-        if (x >= rooms[i].center_x - rooms[i].length / 2 &&
-            x <= rooms[i].center_x + rooms[i].length / 2 &&
-            y >= rooms[i].center_y - rooms[i].width / 2 &&
-            y <= rooms[i].center_y + rooms[i].width / 2) {
-            return i;
+    int n = 0;
+    for (int i = 0; i < *num_rooms; i++) {
+        if (rooms[i].type == 2) {
+            int n_spell = get_random_number(3, 10);
+            int n = 0;
+            while (n < n_spell) {
+                int x = get_random_number(1, MAP_SIZEx - 1);
+                int y = get_random_number(1, MAP_SIZEy - 1);
+                int choice = get_random_number(0, 2);
+                int curr_room = find_room2(x, y, map, *num_rooms, rooms);
+                if (curr_room == i) {
+                    map[x][y] = choices[choice];
+                    n++;
+                }
+            }
         }
     }
-    return -1;
 }
 
 void password_doors(char map[MAP_SIZEx][MAP_SIZEy], int num_rooms, Room2 *rooms) {
@@ -533,24 +554,6 @@ void password_doors(char map[MAP_SIZEx][MAP_SIZEy], int num_rooms, Room2 *rooms)
     }
 }
 
-void unvisible_traps(char map[MAP_SIZEx][MAP_SIZEy], char traps[MAP_SIZEx][MAP_SIZEy]) {
-    //initialize traps array to all zeros
-    memset(traps, 0, sizeof(char) * MAP_SIZEx * MAP_SIZEy);
-
-    int num_traps = get_random_number(MIN_TRAPS, MAX_TRAPS);
-    int i = 0;
-
-    while (i < num_traps) {
-        int y = get_random_number(1,  MAP_SIZEx - 1);
-        int x = get_random_number(1, MAP_SIZEy - 1);
-
-        if (map[y][x] == '.' || map[y][x] == ',' || map[y][x] == '~' ||  map[y][x] == '-' ||  map[y][x] == '#') {
-            traps[y][x] = 1;
-            i++; 
-        }
-    }
-}
-
 void master_key(char map[MAP_SIZEx][MAP_SIZEy]) {
     int x = get_random_number(1, MAP_SIZEx - 1);
     int y = get_random_number(1, MAP_SIZEy - 1);
@@ -564,20 +567,18 @@ void demons (char map[MAP_SIZEx][MAP_SIZEy], int num_rooms, Room2 *rooms) {
     char dem_type[5] = {'D', 'F', 'G', 'S', 'U'};
     
     for (int i = 0; i < num_rooms - 1; i++) { //only one demon in each room
-        rooms[i].demon_x = get_random_number(rooms[i].center_x - rooms[i].length / 2 + 1, rooms[i].center_x + rooms[i].length / 2 - 1);
-        rooms[i].demon_y = get_random_number(rooms[i].center_y - rooms[i].width / 2 + 1, rooms[i].center_y + rooms[i].width / 2 - 1);
+        if (rooms[i].type != 2) {
+            rooms[i].demon_x = get_random_number(rooms[i].center_x - rooms[i].length / 2 + 1, rooms[i].center_x + rooms[i].length / 2 - 1);
+            rooms[i].demon_y = get_random_number(rooms[i].center_y - rooms[i].width / 2 + 1, rooms[i].center_y + rooms[i].width / 2 - 1);
 
-        rooms[i].demon_type = get_random_number(1, 4);
-        map[rooms[i].demon_x][rooms[i].demon_y] = dem_type[rooms[i].demon_type];
+            rooms[i].demon_type = get_random_number(1, 4);
+            map[rooms[i].demon_x][rooms[i].demon_y] = dem_type[rooms[i].demon_type];
+        }
     }
 }
 
 void save_rooms(const char *filename, Room2 rooms[], int num_rooms, char traps[MAP_SIZEx][MAP_SIZEy], char unvisible_door[MAP_SIZEx][MAP_SIZEy]) {
     FILE *file = fopen(filename, "w");
-    if (file == NULL) {
-        perror("Error opening file");
-        return;
-    }
 
     for (int i = 0; i < num_rooms; i++) {
         fprintf(file, "Room %d:\n", i + 1);
@@ -608,12 +609,11 @@ void save_rooms(const char *filename, Room2 rooms[], int num_rooms, char traps[M
         fprintf(file, "\n");
     }
 
-    // Add trap coordinates after the room info
     fprintf(file, "Traps:");
     for (int y = 0; y < MAP_SIZEx; y++) {
         for (int x = 0; x < MAP_SIZEy; x++) {
             if (traps[y][x] == 1) {
-                fprintf(file, " (%d, %d)", x, y);
+                fprintf(file, " (%d, %d)", y, x);
             }
         }
     }
@@ -708,7 +708,7 @@ void treasure_room_builder() {
     }
 }
 
-void floor_builder(int floor) {
+void floor_builder(int floor, int level) {
     char map[MAP_SIZEx][MAP_SIZEy];
     char traps[MAP_SIZEx][MAP_SIZEy];
     char unvisible_door[MAP_SIZEx][MAP_SIZEy];
@@ -730,7 +730,7 @@ void floor_builder(int floor) {
         }
     }
 
-    room_builder(rooms, &num_rooms, map);
+    room_builder(rooms, &num_rooms, map, level);
     if (floor == 4) {
         treasure(map, rooms, &num_rooms);
     }
@@ -740,22 +740,20 @@ void floor_builder(int floor) {
         pillar_builder(map, &rooms[i]);
     }
     
-    path_and_door_builder(map, rooms, num_rooms);
+    path_and_door_builder(map, rooms, &num_rooms);
 
     fix_map(map);
     food(map);
     gold_y(map);
     gold_b(map);
     weapon_placer(map);
-    unvisible_traps(map, traps);
-    spell(map, rooms, num_rooms);
 
     bool left_placed = false;
-    bool right_placed = false;
 
-    staircase_builder(map, &left_placed, &right_placed);
-    //unvisible_doors(map, unvisible_door);
+    staircase_builder(map, &left_placed);
+    unvisible_doors(map, unvisible_door, rooms, num_rooms);
     demons(map, num_rooms, rooms);
+    spell(map, rooms, &num_rooms);
 
     password_doors(map, num_rooms, rooms);
     for (int i = 0;  i < 20 ; i++) {
@@ -779,17 +777,15 @@ void floor_builder(int floor) {
     save_rooms(infofile, rooms, num_rooms, traps, unvisible_door);
 }
 
-
-
-int map_generator() {
+int map_generator(int level) {
     setlocale(LC_ALL, "");
     srand(time(NULL));
     int floor = 0;
 
-    floor_builder(1);
-    floor_builder(2);
-    floor_builder(3);
-    floor_builder(4);
+    floor_builder(1, level);
+    floor_builder(2, level);
+    floor_builder(3, level);
+    floor_builder(4, level);
     treasure_room_builder();
 
     return 0;
