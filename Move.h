@@ -6,17 +6,17 @@
 #include <string.h>
 #include <ncurses.h>
 #include <locale.h>
-#include <wchar.h>
 #include <time.h>
 #include <unistd.h>
 #include <stdbool.h>
 #include <math.h>
 
 
+#define MAX_TRAPS 100
+#define MIN_TRAPS 10
 #define MAX_HUNGER 30
-#define MAX_ROOMS 12
 #define TIME_INTERVAL 2
-#define HUNGER_RATE 10
+#define HUNGER_RATE 30
 #define FOOD_CONVERSION_RATE 10
 #define LIFE 100
 #define BORDER_X 30
@@ -24,8 +24,13 @@
 #define COLOR_PURPLE 70
 #define COLOR_DARK_PINK 60
 #define COLOR_ORANGE 80
+#define COLOR_GREEN_PASS 90
+#define COLOR_GOLD 100
+#define COLOR_GRAY 110
+#define COLOR_BLACK_GOLD 120
+#define COLOR_LIGHT_BLUE 130
+#define NAME_WIDTH 30
 
-Mix_Music *current_music;
 
 char temp_map[50][184];
 
@@ -45,13 +50,12 @@ typedef struct {
 
     int masterkey, password_door;
 
-    char username[50];
+    char username[10];
     char password[50];
     char email[100];
     int score;
     int number_of_finished_games;
     int experience;
-    char login_datetime[64];
     int rank;
     char special_name[50];
 } user;
@@ -62,9 +66,9 @@ typedef struct {
     int distance;
 } weapon;
 
-const char *food_names[] = {"Normal Food", "Superior Food", "Magical Food", "Poisoned Food"};
+const char *food_names[] = {"Normal Food", "Superior Food", "Magical Food"};
 int food_counts[3];
-char time_food[3]; //special foods will be converted to normal food
+int time_food[2]; //special foods will be converted to normal food
 
 const char *spell_names[] = {"Health", "Speed", "Damage"};
 int spell_count[] = {0, 0, 0};
@@ -73,11 +77,13 @@ int spell_speed[] = {1, 2, 1};
 int spell_damage[] = {1, 1, 2};
 
 const char *music_files[4] = {
-    "1-04. Opening.mp3",
-    "1-07. Temple of Time.mp3",
-    "1-29. Riding (Day).mp3",
-    "1-26. The Events of 100 Years Ago.mp3"
+    "alexander-nakarada-chase(chosic.com).mp3",
+    "Distant-Sky-Epic-Hybrid-Music-chosic.com_.mp3",
+    "Hitman(chosic.com).mp3",
+    "Russell Velázquez.TMNT (2003) Main Theme.mp3"
 };
+
+Mix_Music *current_music;
 
 typedef struct {
     chtype character;
@@ -95,23 +101,22 @@ Point player;
 typedef struct {
     int room_number;
     Point center;
-    Point dimensions; // width x height
+    Point dimensions;
     int type;
-    Point doors[10]; // Assuming max 10 doors for simplicity
+    Point doors[10];
     int num_doors;
-    Point pillars[10]; // Assuming max 10 pillars
+    Point pillars[10];
     int num_pillars;
-    Point windows[10]; // Assuming max 10 windows
+    Point windows[10];
     int num_windows;
     int visibility;
     struct {
         int type;
         int life;
         Point position;
+        int damage;
     } demon;
 } Room;
-
-
 
 typedef struct {
     Point position;
@@ -119,28 +124,9 @@ typedef struct {
     char type;
 } DEMON;
 
+
 int get_random_number(int min, int max) {
     return rand() % (max - min + 1) + min;
-}
-
-void handle_music_change(char map[LINES][COLS], int new_x, int new_y, const char *music_files[], int num_music_files) {
-    if (map[new_y][new_x] == '+') { // the music must change
-        int music = get_random_number(0, num_music_files - 1);
-        const char *music_file = music_files[music];
-
-        if (current_music != NULL) {
-            Mix_HaltMusic();
-            Mix_FreeMusic(current_music);
-        }
-        current_music = Mix_LoadMUS(music_file);
-        if (current_music == NULL) {
-            //printf("Mix_LoadMUS error: %s\n", Mix_GetError());
-        } else {
-            if (Mix_PlayMusic(current_music, -1) == -1) {
-                //printf("Mix_PlayMusic error: %s\n", Mix_GetError());
-            }
-        }
-    }
 }
 
 void load_floor(char next_map[LINES][COLS], int current_floor) {
@@ -150,7 +136,7 @@ void load_floor(char next_map[LINES][COLS], int current_floor) {
     sprintf(filename, "map%d.txt", current_floor + 1);
     FILE *new_file = fopen(filename, "r");
 
-    for (int i = 0; i < LINES; i++) { // Start from the 2nd line, to allocate space at top for game messages
+    for (int i = 0; i < LINES; i++) { 
         for (int j = 0; j < COLS; j++) {
             int ch = fgetc(new_file);
             if (ch == EOF) {
@@ -182,7 +168,7 @@ void load_floor(char next_map[LINES][COLS], int current_floor) {
         }
     }
 
-    mvprintw(new_y, new_x, "@");  // Place the player on the new floor
+    mvprintw(new_y, new_x, "\U0001FBC6");  // Place the player on the new floor
     temp_map[new_y][new_x] = map[new_y][new_x];  // Update the temporary map
     refresh();
 }
@@ -215,7 +201,8 @@ int pass_screen(int password) {
 
     init_pair(1, COLOR_YELLOW, COLOR_BLACK);
     init_pair(2, COLOR_RED, COLOR_BLACK);
-    init_pair(3, COLOR_MAGENTA, COLOR_BLACK);
+    init_pair(3, COLOR_ORANGE, COLOR_BLACK);
+    init_pair(4, COLOR_GREEN, COLOR_BLACK);
 
     int is_reverse = get_random_number(0, 1);
     if (is_reverse) {
@@ -233,7 +220,9 @@ int pass_screen(int password) {
         input[4] = '\0';
 
         if (strcmp(input, password_str) == 0) {
+            attron(COLOR_PAIR(4));
             mvprintw(LINES / 2 + 1, (COLS - 25) / 2, "Password correct!");
+            attroff(COLOR_PAIR(4));
             refresh();
             sleep(2);
             endwin();
@@ -307,23 +296,25 @@ void clear_password_display() {
     refresh();
 }
 
-void color_map (char map[LINES][COLS], char pass_doors_locked[LINES][COLS]) {
+void color (char map[LINES][COLS], char pass_doors_locked[LINES][COLS]) {
     start_color();
 
     init_color(COLOR_YELLOW, 1000, 1000, 0);
     init_color(COLOR_PURPLE, 600, 0, 600);
     init_color(COLOR_ORANGE, 900, 500, 0);
     init_color(COLOR_DARK_PINK, 600, 0, 450);
+    init_color(COLOR_GREEN_PASS, 124, 252, 0);
+    init_color(COLOR_GOLD, 800, 600, 200);
 
     init_pair(1, COLOR_RED, COLOR_BLACK);
-    init_pair(2, COLOR_GREEN, COLOR_BLACK);
+    init_pair(2, COLOR_GREEN_PASS, COLOR_BLACK);
     init_pair(3, COLOR_YELLOW, COLOR_BLACK);
     init_pair(4, COLOR_BLUE, COLOR_BLACK);
     init_pair(5, COLOR_CYAN, COLOR_BLACK);
     init_pair(6, COLOR_DARK_PINK, COLOR_BLACK);
     init_pair(7, COLOR_PURPLE, COLOR_BLACK);
 
-    for (int i = 0; i < LINES; i++) {
+    for (int i = 2; i < LINES; i++) {
         for (int j = 0; j < COLS; j++) {
             if (map[i][j] == '@') {
                 if (pass_doors_locked[i][j] == 0) {
@@ -364,6 +355,18 @@ void color_map (char map[LINES][COLS], char pass_doors_locked[LINES][COLS]) {
     refresh();
 }
 
+int find_room(int x, int y, char map[LINES][COLS], int num_rooms, Room *rooms) {
+    for (int i = 0; i < num_rooms; i++) {
+        if (x >= rooms[i].center.y - rooms[i].dimensions.x / 2 &&
+            x <= rooms[i].center.y + rooms[i].dimensions.x / 2 &&
+            y >= rooms[i].center.x - rooms[i].dimensions.y / 2 &&
+            y <= rooms[i].center.x + rooms[i].dimensions.y / 2) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 int weapon_menu(WINDOW *win, int COLS, int LINES, weapon weapons[], int n_choices, user player) {
     int choice = 0;
     keypad(win, TRUE);
@@ -377,11 +380,11 @@ int weapon_menu(WINDOW *win, int COLS, int LINES, weapon weapons[], int n_choice
     mvwprintw(win, LINES / 2 - 4, COLS / 2 - strlen(title) / 2, "%s", title);
     attroff(A_BLINK);
 
-    mvwprintw(win, LINES / 2 - 2, COLS / 2 - 20, "1. Mace            - Count: Infinite!| Damage: 5 | Distance: 1");
-    mvwprintw(win, LINES / 2 - 1, COLS / 2 - 20, "2. Sword           - Count:    %d     | Damage: 10| Distance: 1", player.sword);
-    mvwprintw(win, LINES / 2 + 1, COLS / 2 - 20, "3. Normal Arrow    - Count:    %d     | Damage: 5 | Distance: 5", player.normal_arrow);
-    mvwprintw(win, LINES / 2 + 2, COLS / 2 - 20, "4. Dagger          - Count:    %d     | Damage: 12| Distance: 5", player.dagger);
-    mvwprintw(win, LINES / 2 + 4, COLS / 2 - 20, "5. Magic Wand      - Count:    %d     | Damage: 15| Distance: 10", player.magic_wand);
+    mvwprintw(win, LINES / 2 - 2, COLS / 2 - 30, "1. Mace            - Count: Infinite!| Damage: 5 | Distance: 1");
+    mvwprintw(win, LINES / 2 - 1, COLS / 2 - 30, "2. Sword           - Count:    %d     | Damage: 10| Distance: 1", player.sword);
+    mvwprintw(win, LINES / 2 + 1, COLS / 2 - 30, "3. Normal Arrow    - Count:    %d     | Damage: 5 | Distance: 5", player.normal_arrow);
+    mvwprintw(win, LINES / 2 + 2, COLS / 2 - 30, "4. Dagger          - Count:    %d     | Damage: 12| Distance: 5", player.dagger);
+    mvwprintw(win, LINES / 2 + 4, COLS / 2 - 30, "5. Magic Wand      - Count:    %d     | Damage: 15| Distance: 10", player.magic_wand);
 
     getch();
     curs_set(1);
@@ -395,12 +398,11 @@ int food_menu(WINDOW *win, int COLS, int LINES, int n_choices, user player) {
     curs_set(0);
 
     while (1) {
-        // Clear window and draw box
         wclear(win);
         box(win, 0, 0);
         char title[20] = "Food Menu";
         wattron(win, A_BOLD);
-        mvwprintw(win, LINES / 2 - 4, COLS / 2, "%s", title);
+        mvwprintw(win, LINES / 2 - 4, COLS / 2 - 5, "%s", title);
         wattroff(win, A_BOLD);
 
         // Display food options
@@ -409,8 +411,12 @@ int food_menu(WINDOW *win, int COLS, int LINES, int n_choices, user player) {
                 wattron(win, A_REVERSE);
             }
 
-            mvwprintw(win, LINES / 2 - 2 + i, COLS / 2 - 15, "%d. %s             - Count: %d |", i + 1, food_names[i], food_counts[i]);
-            wattroff(win, A_REVERSE);
+            mvwprintw(win, LINES / 2 - 2 + i, COLS / 2 - 20, "%d. %-*.*s", i + 1, NAME_WIDTH, NAME_WIDTH, food_names[i]);
+            mvwprintw(win, LINES / 2 - 2 + i, COLS / 2 + 10, "count: %3d |", food_counts[i]);
+
+            if (i == highlight) {
+                wattroff(win, A_REVERSE);
+            }
         }
 
         int c = wgetch(win);
@@ -438,7 +444,7 @@ int food_menu(WINDOW *win, int COLS, int LINES, int n_choices, user player) {
 
         wrefresh(win);
     }
-    
+
     curs_set(1);
     return choice;
 }
@@ -455,7 +461,7 @@ int spell_menu(WINDOW *win, int COLS, int LINES, int n_choices, user player) {
         box(win, 0, 0);
         char title[20] = "Spell Menu";
         wattron(win, A_BOLD);
-        mvwprintw(win, LINES / 2 - 4, COLS / 2, "%s", title);
+        mvwprintw(win, LINES / 2 - 4, COLS / 2 - 5, "%s", title);
         wattroff(win, A_BOLD);
 
         
@@ -639,7 +645,7 @@ void move_player2(char ch, int *x, int *y, char map[LINES][COLS], user *player, 
             if (ch2 == 'y') {
                 player->gold++;
                 map[new_y][new_x] = ' ';
-                attron(COLOR_PAIR(2));
+                attron(COLOR_PAIR(1));
                 move(1, 0);
                 clrtoeol();
                 mvprintw(0, 5, "%-30s", "You picked up a golden coin!");
@@ -842,7 +848,7 @@ void treasure_room(char treasure_room_map[LINES][COLS], user *player, weapon *wp
     for (int i = 0; i < LINES; i++) {
         for (int j = 0; j < COLS; j++) {
             if (treasure_room_map[i][j] != ' ') {
-                mvaddch(i, j, treasure_room_map[i][j]);
+                color(treasure_room_map, NULL);
                 if (treasure_room_map[i][j] == 'D' || treasure_room_map[i][j] == 'S' || treasure_room_map[i][j] == 'U' || treasure_room_map[i][j] == 'G' || treasure_room_map[i][j] == 'F') {
                     demons[num_demons].position.x = i;
                     demons[num_demons].position.y = j;
@@ -907,7 +913,7 @@ void treasure_room(char treasure_room_map[LINES][COLS], user *player, weapon *wp
         } else if (ch == 'e') {
             ScreenChar **screendata = NULL;
             save_screen(&screendata, &LINES, &COLS);
-            int food_num = food_menu(stdscr, COLS, LINES, 4, *player); //food to eat
+            int food_num = food_menu(stdscr, COLS, LINES, 3, *player); //food to eat
             food_counts[food_num]--;
             player->food--;
             hungerLevel = MAX_HUNGER;
@@ -1128,31 +1134,51 @@ void treasure_room(char treasure_room_map[LINES][COLS], user *player, weapon *wp
     endwin();
 }
 
+void handle_music_change(char map[LINES][COLS], int new_x, int new_y, const char *music_files[], int num_music_files) {
+    if (map[new_y][new_x] == '+') { // the music must change
+        int music = get_random_number(0, num_music_files - 1);
+        const char *music_file = music_files[music];
 
-int find_room(int x, int y, char map[LINES][COLS], int num_rooms, Room *rooms) {
-    for (int i = 0; i < num_rooms; i++) {
-        if (x > rooms[i].center.y - rooms[i].dimensions.x / 2 &&
-            x < rooms[i].center.y + rooms[i].dimensions.x / 2 &&
-            y > rooms[i].center.x - rooms[i].dimensions.y / 2 &&
-            y < rooms[i].center.x + rooms[i].dimensions.y / 2) {
-            return i;
+        if (current_music != NULL) {
+            Mix_HaltMusic();
+            Mix_FreeMusic(current_music);
+        }
+        current_music = Mix_LoadMUS(music_file);
+        if (current_music == NULL) {
+            //printf("Mix_LoadMUS error: %s\n", Mix_GetError());
+        } else {
+            if (Mix_PlayMusic(current_music, -1) == -1) {
+                //printf("Mix_PlayMusic error: %s\n", Mix_GetError());
+            }
         }
     }
-    return -1;
 }
 
+void battle_room() {
+    initscr();
+    clear();
+    char message[] = "Welcome to the battle room!";
+    mvprintw(LINES / 2, COLS / 2 - strlen(message) / 2, "%s", message);
 
-void move_player(Mix_Music* current_music, char username[6], Room *rooms, int num_rooms, int next, int prev, int *door_password, char temp_map[LINES][COLS], char map[LINES][COLS], char traps[LINES][COLS], int *x, int *y, int ch, user *player, int current_floor, char pass_doors_locked[LINES][COLS], char fallen_weapons[LINES][COLS], int spell_effect_count, char treasure_room_map[LINES][COLS], char unvisible_door[LINES][COLS], weapon *wpn, int *lost) {
+    refresh();
+    getch();
+    endwin(); 
+}
+
+void move_player(Mix_Music* current_music, char username[6], Room *rooms, int num_rooms, int *next, int *prev, int *door_password, char temp_map[LINES][COLS], char map[LINES][COLS], int *x, int *y, int ch, user *player, int current_floor, char pass_doors_locked[LINES][COLS], char fallen_weapons[LINES][COLS], int spell_effect_count, char treasure_room_map[LINES][COLS], char unvisible_door[LINES][COLS], weapon *wpn, int *lost, int *is_in_enchant_room, int color) {
     static time_t password_start_time;
     int new_x = *x, new_y = *y;
     char ch2;
     start_color();
     init_pair(2, COLOR_CYAN, COLOR_BLUE);
+    int room = find_room(new_x, new_y, map, num_rooms, rooms);
 
     if (password_start_time != 0 && difftime(time(NULL), password_start_time) >= 30) {
         clear_password_display();
         password_start_time = 0;
     }
+
+    int chance_stepping_on_trap = get_random_number(MIN_TRAPS, MAX_TRAPS);
 
     if (player->velocity == 2) {
         switch (ch) {
@@ -1234,13 +1260,22 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
         }
     }
 
-    if (traps[new_x][new_y == 1]) {
+    if (chance_stepping_on_trap < 11 && map[new_y][new_x] != '#' && map[new_y][new_x] != '|' && map[new_y][new_x] != '_' && map[new_y][new_x] != 'O' 
+                && map[new_y][new_x] != '=' && map[new_y][new_x] != ' ' && map[new_y][new_x] != '@') {
         player->life--;
         if (player->life <= 0) {
             *lost = 1;
         }
-        map[new_x][new_y] = '^'; //marked as trap
+        map[new_y][new_x] = '^'; //marked as trap
+        attron(COLOR_PAIR(2));
+        mvprintw(0, 5, "%-30s", "Oops! you stepped on a trap!");
         refresh();
+        attroff(COLOR_PAIR(2));
+        refresh();
+        ScreenChar **screendata = NULL;
+        save_screen(&screendata, &LINES, &COLS);
+        battle_room();
+        display_screen(screendata, LINES, COLS);
     }
     //check if the new position is valid and not a wall or other block
     if (new_x >= 0 && new_x < COLS && new_y >= 0 && new_y < LINES) {
@@ -1250,15 +1285,17 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
             temp_map[*y][*x] = map[*y][*x];
             *x = new_x;
             *y = new_y;
-            mvprintw(*y, *x, "@");
+            mvprintw(*y, *x, "\U0001FBC6");
         } else if ((map[new_y][new_x] == '|' || map[new_y][new_x] == '_') && (map[new_y + 1][new_x] == '#' || map[new_y - 1][new_x] == '#' || map[new_y][new_x - 1] == '#' || map[new_y][new_x + 1] == '#')) {
             mvprintw(*y, *x, "%c", temp_map[*y][*x] == '@' ? '.' : temp_map[*y][*x]);
+            map[new_y][new_x] = '?';
             temp_map[*y][*x] = map[*y][*x];
             *x = new_x;
             *y = new_y;
-            mvprintw(*y, *x, "@");
+            mvprintw(*y, *x, "\U0001FBC6");
+            refresh();
         }
-        
+             
         else if (map[new_y][new_x] != '|' && map[new_y][new_x] != '_' && map[new_y][new_x] != 'O' 
                 && map[new_y][new_x] != '=' && map[new_y][new_x] != ' ' && map[new_y][new_x] != '@') {
             // Regular movement
@@ -1266,7 +1303,7 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
             temp_map[*y][*x] = map[*y][*x];
             *x = new_x;
             *y = new_y;
-            mvprintw(*y, *x, "@");
+            mvprintw(*y, *x, "\U0001FBC6");
 
             //treasure room
             if (map[new_y][new_x] == '*') {
@@ -1274,9 +1311,13 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
 
             } else if (map[new_y][new_x] == '+') { //the music must change
                 handle_music_change(map, new_x, new_y, music_files, 4);
+                int room_num = find_room(new_y, new_x, map, num_rooms, rooms);
+                if (rooms[room_num].type == 2) {
+                    *is_in_enchant_room = 1;
+                }
             }
             //collecting items
-            else if (map[new_y][new_x] == 'f') {
+            else if (map[new_y][new_x] == 'f' && rooms[room].type != 3) {
                 ch2 = getch();
                 if (ch2 != 'g') {
                     if (player->food < 5) {
@@ -1291,7 +1332,7 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
                         attroff(COLOR_PAIR(1));
                     }
                 }
-            }  else if (map[new_y][new_x] == 'a') {
+            }  else if (map[new_y][new_x] == 'a' && rooms[room].type != 3) {
                 ch2 = getch();
                 if (ch2 != 'g') {
                     if (player->food < 5) {
@@ -1307,7 +1348,7 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
                         attroff(COLOR_PAIR(1));
                     }
                 }
-            } else if (map[new_y][new_x] == 'j') {
+            } else if (map[new_y][new_x] == 'j' && rooms[room].type != 3) {
                 ch2 = getch();
                 if (ch2 != 'g') {
                     if (player->food < 5) {
@@ -1323,7 +1364,7 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
                         attroff(COLOR_PAIR(1));
                     }
                 }
-            } else if (map[new_y][new_x] == '$') {
+            } else if (map[new_y][new_x] == '$' && rooms[room].type != 3) {
                 ch2 = getch();
                 if (ch2 != 'g') {
                     player->gold++;
@@ -1335,7 +1376,7 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
                     refresh();
                     attroff(COLOR_PAIR(1));
                 }
-            } else if (map[new_y][new_x] == 'G') {
+            } else if (map[new_y][new_x] == 'g' && rooms[room].type != 3) {
                 ch2 = getch();
                 if (ch2 != 'g') {
                     player->gold += 5; // Each black gold is equal to 5 yellow golds!
@@ -1347,7 +1388,7 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
                     refresh();
                     attroff(COLOR_PAIR(1));
                 }
-            } else if (map[new_y][new_x] == '!') { // Dagger
+            } else if (map[new_y][new_x] == '!' && rooms[room].type != 3) { // Dagger
                 ch2 = getch();
                 if (ch2 != 'g') {
                     player->dagger += (fallen_weapons[new_y][new_x] == 1) ? 1 : 10;
@@ -1359,7 +1400,7 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
                     refresh();
                     attroff(COLOR_PAIR(1));
                 }
-            } else if (map[new_y][new_x] == '\\') { // Magic wand
+            } else if (map[new_y][new_x] == '\\' && rooms[room].type != 3) { // Magic wand
                 ch2 = getch();
                 if (ch2 != 'g') {
                     player->magic_wand += (fallen_weapons[new_y][new_x] == 1) ? 1 : 8;
@@ -1371,7 +1412,7 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
                     refresh();
                     attroff(COLOR_PAIR(1));
                 }
-            } else if (map[new_y][new_x] == ')') { // Normal arrow
+            } else if (map[new_y][new_x] == ')' && rooms[room].type != 3) { // Normal arrow
                 ch2 = getch();
                 if (ch2 != 'g') {
                     player->normal_arrow += (fallen_weapons[new_y][new_x] == 1) ? 1 : 20;
@@ -1383,7 +1424,7 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
                     refresh();
                     attroff(COLOR_PAIR(1));
                 }
-            } else if (map[new_y][new_x] == '(') { // Sword
+            } else if (map[new_y][new_x] == '(' && rooms[room].type != 3) { // Sword
                 ch2 = getch();
                 if (ch2 != 'g') {
                     if (!player->sword) {
@@ -1398,20 +1439,15 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
                     attroff(COLOR_PAIR(1));
                 }
             } else if (map[new_y][new_x] == '>') {
-                clear(); // Clear the screen
-                next = 1;
-                refresh();
-            } else if (map[new_y][new_x] == '<') {
                 char ch3 = getch();
                 if (ch3 == '>') { //right arrow
-                    prev = 1;
+                    *prev = 1;
                 } else if (ch3 == '<') { //left arrow
-                    next = 1;
+                    *next = 1;
                 }
-                refresh();
             }
             
-            else if (map[new_y][new_x] == 'h') { // Health
+            else if (map[new_y][new_x] == 'h' && rooms[room].type != 3) { // Health
                 ch2 = getch();
                 if (ch2 != 'g') {
                     player->health++;
@@ -1424,7 +1460,7 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
                     refresh();
                     attroff(COLOR_PAIR(1));
                 }
-            } else if (map[new_y][new_x] == 'd') { // Damage
+            } else if (map[new_y][new_x] == 'd' && rooms[room].type != 3) { // Damage
                 ch2 = getch();
                 if (ch2 != 'g') {
                     player->damage++;
@@ -1437,7 +1473,7 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
                     refresh();
                     attroff(COLOR_PAIR(1));
                 }
-            } else if (map[new_y][new_x] == 's') { // Speed
+            } else if (map[new_y][new_x] == 's' && rooms[room].type != 3) { // Speed
                 ch2 = getch();
                 if (ch2 != 'g') {
                     player->speed++;
@@ -1468,74 +1504,82 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
                 display_password(*door_password, time(NULL));
                 password_start_time = time(NULL);  // Start the timer for displaying the password
             }
-            
-            if (traps[new_y][new_x] == 1) {
-                player->health--;
-            }
 
+        } else if (map[new_y][new_x] == '@') { //password door
+           //if the door is locked and the user has not attempted to open it before
+            if (pass_doors_locked[new_y][new_x] == 1) {
+                ScreenChar **screendata = NULL;
+                save_screen(&screendata, &LINES, &COLS);
 
-        }
-    } else if (map[new_y][new_x] == '@') { //password door
+                //check if the user has master key
+                if (player->masterkey) { //user can pass
+                    //there is a 10% chance the key might break!
+                    int chance = get_random_number(1, 10);
+                    if (chance < 10 && chance >= 0) {
+                        mvprintw(*y, *x, "%c", temp_map[*y][*x]);
+                        temp_map[*y][*x] = map[*y][*x];
+                        *x = new_x;
+                        *y = new_y;
+                        pass_doors_locked[new_y][new_x] = 0;
+                        player->masterkey--; //used
+                        attron(COLOR_PAIR(2));
+                        move(1, 0);
+                        clrtoeol();
+                        mvprintw(0, 5, "%-30s", "You used your master key!");
+                        refresh();
+                        attroff(COLOR_PAIR(1));
+                    } else {
+                        pass_doors_locked[new_y][new_x] = 1;
+                        display_screen(screendata, LINES, COLS);
+                        attron(COLOR_PAIR(2));
+                        move(1, 0);
+                        clrtoeol();
+                        mvprintw(0, 5, "%-30s", "Key breaked while using!");
+                        refresh();
+                        attroff(COLOR_PAIR(1));
+                    }
+                } else {
+                    if (pass_screen(*door_password)) { 
+                        display_screen(screendata, LINES, COLS);
+                        pass_doors_locked[new_y][new_x] = 0; //unlock the door
+                        mvprintw(*y, *x, "%c", temp_map[*y][*x]);
+                        temp_map[*y][*x] = map[*y][*x];
+                        *x = new_x;
+                        *y = new_y;
+                        attron(COLOR_PAIR(2));
+                        move(1, 0);
+                        clrtoeol();
+                        mvprintw(0, 5, "%-30s", "Door unlocked successfully!");
+                        refresh();
+                        attroff(COLOR_PAIR(1));
+                    } else {
+                        pass_doors_locked[new_y][new_x] = 2; //permanently locked
+                        display_screen(screendata, LINES, COLS);
+                        attron(COLOR_PAIR(2));
+                        move(1, 0);
+                        clrtoeol();
+                        mvprintw(0, 5, "%-30s", "Door locked permenantly!");
+                        refresh();
+                        attroff(COLOR_PAIR(1));
+                    }
+                }
 
-        //if the door is locked and the user has not attempted to open it before
-        if (pass_doors_locked[new_y][new_x] == 1) {
-            ScreenChar **screendata = NULL;
-            save_screen(&screendata, &LINES, &COLS);
-
-            //check if the user has master key
-            if (player->masterkey) { //user can pass
+            } else if (pass_doors_locked[new_y][new_x] == 0) {
+                //if the door is already unlocked, allow passage
                 mvprintw(*y, *x, "%c", temp_map[*y][*x]);
-                temp_map[*y][*x] = map[*y][*x];
+                temp_map[*y][*x] = map[*y][new_x];
                 *x = new_x;
                 *y = new_y;
-                pass_doors_locked[new_x][new_y] = 0;
-                player->masterkey--; //used
                 attron(COLOR_PAIR(2));
                 move(1, 0);
                 clrtoeol();
-                mvprintw(0, 5, "%-30s", "You used your master key!");
+                mvprintw(0, 5, "%s", "Password door already open!");
                 refresh();
                 attroff(COLOR_PAIR(1));
-            } else {
-                if (pass_screen(*door_password)) { 
-                    display_screen(screendata, LINES, COLS);
-                    pass_doors_locked[new_y][new_x] = 0; //unlock the door
-                    mvprintw(*y, *x, "%c", temp_map[*y][*x]);
-                    temp_map[*y][*x] = map[*y][*x];
-                    *x = new_x;
-                    *y = new_y;
-                    attron(COLOR_PAIR(2));
-                    move(1, 0);
-                    clrtoeol();
-                    mvprintw(0, 5, "%-30s", "Door unlocked successfully!");
-                    refresh();
-                    attroff(COLOR_PAIR(1));
-                } else {
-                    pass_doors_locked[new_y][new_x] = 2; //permanently locked
-                    display_screen(screendata, LINES, COLS);
-                    attron(COLOR_PAIR(2));
-                    move(1, 0);
-                    clrtoeol();
-                    mvprintw(0, 5, "%-30s", "Door locked permenantly!");
-                    refresh();
-                    attroff(COLOR_PAIR(1));
-                }
+            } else { //always locked door
             }
-
-        } else if (pass_doors_locked[new_y][new_x] == 0) {
-            //if the door is already unlocked, allow passage
-            mvprintw(*y, *x, "%c", temp_map[*y][*x]);
-            temp_map[*y][*x] = map[*y][new_x];
-            *x = new_x;
-            *y = new_y;
-            attron(COLOR_PAIR(2));
-            move(1, 0);
-            clrtoeol();
-            mvprintw(0, 5, "%s", "Password door already open!");
-            refresh();
-            attroff(COLOR_PAIR(1));
-        } else { //always locked door
         }
+
     } else if (unvisible_door[new_y][new_x] == 1) {
         //pass the door
         mvprintw(*y, *x, "%c", temp_map[*y][*x] == '@' ? '.' : temp_map[*y][*x]);
@@ -1549,20 +1593,18 @@ void move_player(Mix_Music* current_music, char username[6], Room *rooms, int nu
             time_food[n]++;
 
             // Convert special food to normal food after some time (e.g., 10 turns)
-            if (time_food[n] >= 10) {
-                food_counts[n]--;  // Remove special food
+            if (time_food[n] >= 10 && food_counts[n] > 0) {
+                food_counts[n + 1]--;  // Remove special food
                 food_counts[0]++;  // Increase normal food count
                 time_food[n] = 0;  // Reset the timer
             }
-
-            mvprintw(0, COLS / 2 + n, "%d ", time_food[n]); // Display timer
         }
     }
 
     refresh();
 }
 
-void move_player_continuously(char temp_map[LINES][COLS], char map[LINES][COLS], char traps[LINES][COLS], int *x, int *y, int ch, user *player, int current_floor, char pass_doors_locked[LINES][COLS]) {
+void move_player_continuously(char temp_map[LINES][COLS], char map[LINES][COLS], int *x, int *y, int ch, user *player, int current_floor, char pass_doors_locked[LINES][COLS]) {
     int new_x = *x, new_y = *y;
     static int door_password = 0;
     static time_t password_start_time = 0;
@@ -1659,10 +1701,6 @@ void move_player_continuously(char temp_map[LINES][COLS], char map[LINES][COLS],
                 map[new_y][new_x] = '.';
             }
 
-            if (traps[new_y][new_x] == 1) {
-                player->health--;
-            }
-
             if (map[new_y][new_x] == '@') {
                 if (pass_doors_locked[new_y][new_x] == 1) {
                     ScreenChar **screendata = NULL;
@@ -1703,7 +1741,7 @@ void move_player_continuously(char temp_map[LINES][COLS], char map[LINES][COLS],
     }
 }
 
-void read_room_info(const char *filename, Room *rooms, int *num_rooms, char traps[LINES][COLS], char unvisible_door[LINES][COLS]) {
+void read_room_info(const char *filename, Room *rooms, int *num_rooms, char unvisible_door[LINES][COLS]) {
     FILE *file = fopen(filename, "r");
     if (!file) {
         perror("Error opening file");
@@ -1713,9 +1751,6 @@ void read_room_info(const char *filename, Room *rooms, int *num_rooms, char trap
     char line[256];
     int room_index = -1;
     *num_rooms = 0;
-
-    // Initialize traps and unvisible_door arrays to all zeros
-    memset(traps, 0, sizeof(char) * LINES * COLS);
     memset(unvisible_door, 0, sizeof(char) * LINES * COLS);
 
     while (fgets(line, sizeof(line), file)) {
@@ -1736,15 +1771,6 @@ void read_room_info(const char *filename, Room *rooms, int *num_rooms, char trap
             sscanf(line, "Visibility: %d", &rooms[room_index].visibility);
         } else if (strstr(line, "Demon")) {
             sscanf(line, "Demon: %d (%d, %d)", &rooms[room_index].demon.type, &rooms[room_index].demon.position.x, &rooms[room_index].demon.position.y);
-        } else if (strstr(line, "Traps:")) {
-            int x, y;
-            char *token = strtok(line, " ");
-            while (token != NULL) {
-                if (sscanf(token, "(%d, %d)", &x, &y) == 2) {
-                    traps[x][y] = 1;
-                }
-                token = strtok(NULL, " ");
-            }
         } else if (strstr(line, "Unvisible Doors:")) {
             int x, y;
             char *token = strtok(line, " ");
@@ -1756,10 +1782,7 @@ void read_room_info(const char *filename, Room *rooms, int *num_rooms, char trap
             }
         }
     }
-
     fclose(file);
-
-    // Refresh to display all printed details
     refresh();
 }
 
@@ -1780,28 +1803,28 @@ void demon(char map[LINES][COLS], Room *rooms, int x_ply, int y_ply, int i, user
     mvprintw(rooms[i].demon.position.y, rooms[i].demon.position.x, "%c", original_char);
 
     // Update the demon’s new position
-    if (rooms[i].demon.position.x < x_ply) {
-        rooms[i].demon.position.x++;
-    } else if (rooms[i].demon.position.x > x_ply) {
-        rooms[i].demon.position.x--;
-    }
+    if (count < 5 && rooms[i].demon.life > 0) {
+        if (rooms[i].demon.position.x < x_ply) {
+            rooms[i].demon.position.x++;
+        } else if (rooms[i].demon.position.x > x_ply) {
+            rooms[i].demon.position.x--;
+        }
 
-    if (rooms[i].demon.position.y < y_ply) {
-        rooms[i].demon.position.y++;
-    } else if (rooms[i].demon.position.y > y_ply) {
-        rooms[i].demon.position.y--;
+        if (rooms[i].demon.position.y < y_ply) {
+            rooms[i].demon.position.y++;
+        } else if (rooms[i].demon.position.y > y_ply) {
+            rooms[i].demon.position.y--;
+        }
     }
-
     // Place the demon’s character at the new position
     map[rooms[i].demon.position.y][rooms[i].demon.position.x] = demons[rooms[i].demon.type];
     mvprintw(rooms[i].demon.position.y, rooms[i].demon.position.x, "%c", demons[rooms[i].demon.type]);
 
     int distance = 2;
     if (sqrt(pow((x_ply - rooms[i].demon.position.x), 2) + pow((y_ply - rooms[i].demon.position.y), 2)) <= distance) {
-        player->life -= 1; 
+        player->life -= rooms[i].demon.damage; 
     }
 }
-
 
 void weapon_properties(user *player, weapon *wpn) {
     switch (player->weapon_type) {
@@ -1833,18 +1856,23 @@ void demon_properties (Room *rooms, int num_rooms) {
         switch (rooms[i].demon.type) {
             case 1:
                 rooms[i].demon.life = 5;
+                rooms[i].demon.damage = 1;
                 break;
             case 2:
                 rooms[i].demon.life = 10;
+                rooms[i].demon.damage = 2;
                 break;
             case 3:
                 rooms[i].demon.life = 15;
+                rooms[i].demon.damage = 2;
                 break;
             case 4:
                 rooms[i].demon.life = 20;
+                rooms[i].demon.damage = 2;
                 break;
             case 5:
                 rooms[i].demon.life = 30;
+                rooms[i].demon.damage = 3;
                 break;
         }
     }
@@ -1865,7 +1893,7 @@ void handle_short_range_weapon(int x, int y, int *weapon_count, int damage, Room
                 }
                 demon_nearby = true;
                 break;
-            }
+            } 
         }
         if (demon_nearby) break;
     }
@@ -1961,23 +1989,38 @@ void handle_long_range_weapon(int x, int y, char map[LINES][COLS], Room rooms[],
     }
 
     if (rooms[i].demon.life <= 0) {
-        rooms[i].demon.position.x = 0;
-        rooms[i].demon.position.y = 0;
-        rooms[i].demon.life = 0;
+        rooms[i].demon.type = -1;
+        rooms[i].demon.position = (Point){-1, -1};
     }
 }
 
 void display_map_with_unicode(char map[LINES][COLS]) {
     setlocale(LC_ALL, "");
+    start_color();
 
     const char *ancient_key = "\U000025B3";
+    const char *mace = "\U00002692";
+    const char *dagger = "\U0001F5E1";
+    const char *magic_wand = "\U0001FA84";
+    const char *normal_arrow = "\U000027B3";
+    const char *sword = "\U00002694";
+    init_color(COLOR_GOLD, 800, 600, 200);
+    init_pair(8, COLOR_GOLD, COLOR_BLACK);
 
     for (int i = 0; i < LINES; i++) {
         for (int j = 0; j < COLS; j++) {
             if (map[i][j] == 'K') {
+                attron(COLOR_PAIR(8));
                 mvaddstr(i, j, ancient_key);
-            } else {
-                mvprintw(i, j, "%c", map[i][j]);
+                attroff(COLOR_PAIR(8));
+            } else if (map[i][j] == '!') {
+                mvaddstr(i, j, dagger);
+            } else if (map[i][j] == '(') {
+                mvaddstr(i, j, sword);
+            } else if (map[i][j] == ')') {
+                mvaddstr(i, j, normal_arrow);
+            } else if (map[i][j] == '\\') {
+                mvaddstr(i, j, magic_wand);
             }
         }
     }
@@ -1985,25 +2028,9 @@ void display_map_with_unicode(char map[LINES][COLS]) {
     refresh();
 }
 
-void yellow_trasure_room (char map[LINES][COLS]) {
-    init_pair(32, COLOR_YELLOW, COLOR_BLACK);
-    for (int i = 0; i < LINES; i++) {
-        for (int j = 0;  j < COLS; j++) {
-            if (map[i][j] == '*') {
-                attron(COLOR_PAIR(32));
-                mvprintw(i, j, "%c", map[i][j]);
-                attroff(COLOR_PAIR(32));
-            }
-        }
-    }
-}
-
-void visibility(Room *rooms, int x, int y, int num_rooms, char map[LINES][COLS]) {
-    start_color();
-    init_pair(300, COLOR_BLACK, COLOR_BLACK);
-
+void visibility(Room *rooms, int x, int y, int num_rooms, char map[LINES][COLS], char explored_map[LINES][COLS]) {
     int current_room = find_room(x, y, map, num_rooms, rooms);
-    if (current_room != -1) {
+    if (current_room != -1 && rooms[current_room].type != 3) {
         rooms[current_room].visibility = 1;
 
     }
@@ -2017,42 +2044,165 @@ void visibility(Room *rooms, int x, int y, int num_rooms, char map[LINES][COLS])
 
             for (int x = start_x; x <= end_x; x++) {
                 for (int y = start_y; y <= end_y; y++) {
-                    mvaddch(x, y, map[x][y]);
+                    explored_map[x][y] = map[x][y];
                 }
             }
         }
     }
-        
+     
     refresh(); 
 }
-// void winning(char map[LINES][COLS], int new_score, int new_gold, int new_experience) {
-//     FILE *file = fopen("info.txt", "r+");
-//     if (file == NULL) {
-//         perror("Error opening file");
-//         return;
-//     }
 
-//     int score = 0, gold = 0, experience = 0;
-//     fscanf(file, "%d %d %d", &score, &gold, &experience);
+void print_explored_rooms(Room *rooms, int num_rooms, char map[LINES][COLS], int x_ply, int y_ply, char pass_doors_locked[LINES][COLS], char explored_map[LINES][COLS]) {
+    start_color();
+
+    init_color(COLOR_YELLOW, 1000, 1000, 0);
+    init_color(COLOR_PURPLE, 600, 0, 600);
+    init_color(COLOR_ORANGE, 900, 500, 0);
+    init_color(COLOR_DARK_PINK, 600, 0, 450);
+    init_color(COLOR_GREEN_PASS, 124, 252, 0);
+    init_color(COLOR_GRAY, 300, 300, 300);
+    init_color(COLOR_BLACK_GOLD, 350, 350, 350);
+    init_color(COLOR_LIGHT_BLUE, 135, 206, 400);
+
+    init_pair(1, COLOR_RED, COLOR_BLACK);
+    init_pair(2, COLOR_GREEN_PASS, COLOR_BLACK);
+    init_pair(3, COLOR_YELLOW, COLOR_BLACK);
+    init_pair(4, COLOR_BLUE, COLOR_BLACK);
+    init_pair(5, COLOR_CYAN, COLOR_BLACK);
+    init_pair(6, COLOR_DARK_PINK, COLOR_BLACK);
+    init_pair(7, COLOR_PURPLE, COLOR_BLACK);
+    init_pair(8, COLOR_GRAY, COLOR_BLACK);
+    init_pair(9, COLOR_BLACK_GOLD, COLOR_BLACK);
+    init_pair(10, COLOR_LIGHT_BLUE, COLOR_BLACK);
+
+    const char *ancient_key = "\U000025B3";
+    const char *mace = "\U00002692";
+    const char *dagger = "\U0001F5E1";
+    const char *magic_wand = "\U00002962";
+    const char *normal_arrow = "\U000027B3";
+    const char *sword = "\U00002694";
+    const char *speed = "\U00002604";
+    const char *damage = "\U0001F6E1";
+    const char *health = "\U00002695";
+    const char *food_norm = "\U00002736";
+    const char *food_sup = "\U00002737";
+    const char *food_mag = "\U00002738";
+    const char *black_gold = "\U000020AC";
     
-//     score += new_score;
-//     gold += new_gold;
-//     experience += new_experience;
+    init_color(COLOR_GOLD, 800, 600, 200);
+    init_pair(8, COLOR_GOLD, COLOR_BLACK);
+
+    // Check if the player is in a room
+    int num = find_room(x_ply, y_ply, map, num_rooms, rooms);
+    char direction[4][2] = {{0, 1}, {1, 0}, {0, -1}, {-1, 0}};
+    if (num == -1) {
+        for (int i = 0; i < 4; i++) {
+            if (map[y_ply + direction[i][1]][x_ply + direction[i][0]] == '#' || map[y_ply + direction[i][1]][x_ply + direction[i][0]] == '@') {
+                for (int n = 0; n < 6; n++) {
+                    if (direction[i][1] == 0) {
+                        if (map[y_ply + direction[i][1]][x_ply + direction[i][0] + n] == '#') {
+                            explored_map[y_ply + direction[i][1]][x_ply + direction[i][0] + n] = map[y_ply + direction[i][1]][x_ply + direction[i][0] + n];
+                        }
+                    } else {
+                        if (map[y_ply + direction[i][1] + n][x_ply + direction[i][0]] == '#') {
+                            explored_map[y_ply + direction[i][1]][x_ply + direction[i][0]] = map[y_ply + direction[i][1] + n][x_ply + direction[i][0]];
+                        }
+                    }
+                }
+            }
+        }
+
+    } else if (rooms[num].type == 3) {
+        int left = rooms[num].center.x - rooms[num].dimensions.y / 2;
+        int right = rooms[num].center.x + rooms[num].dimensions.y / 2;
+        int top = rooms[num].center.y - rooms[num].dimensions.x / 2;
+        int bottom = rooms[num].center.y + rooms[num].dimensions.x / 2;  
+
+        for (int x = left; x <= right; x++) {
+            for (int y = top; y <= bottom; y++) {
+                explored_map[x][y] = ' ';
+            }
+        }
+
+        for (int x = x_ply - 2; x <= x_ply + 2; x++) {
+            for (int y = y_ply - 2; y <= y_ply + 2; y++) {
+                explored_map[y][x] = map[y][x];
+            }
+        }
+
+    }
     
-//     // Move the file pointer to the beginning for rewriting
-//     rewind(file);
     
-//     fprintf(file, "%d %d %d", score, gold, experience);
+    else {
+        rooms[num].visibility = 1;
+    }
 
-//     fclose(file);
-// }
+    for (int i = 0; i < LINES; i++) {
+        for (int j = 0; j < COLS; j++) {
+            if (explored_map[i][j] == '@') {
+                if (pass_doors_locked[i][j] == 0) {
+                    attron(COLOR_PAIR(2));
+                    mvprintw(i, j, "%c", explored_map[i][j]);
+                    attroff(COLOR_PAIR(2));
+                } else {
+                    attron(COLOR_PAIR(1));
+                    mvprintw(i, j, "%c", explored_map[i][j]);
+                    attroff(COLOR_PAIR(1));
+                }
+            } else if (explored_map[i][j] == '$' || explored_map[i][j] == '*') {
+                attron(COLOR_PAIR(3));
+                mvprintw(i, j, "%c", explored_map[i][j]);
+                attroff(COLOR_PAIR(3));
+            } else if (explored_map[i][j] == '&') {
+                attron(A_BOLD);
+                mvprintw(i, j, "%c", explored_map[i][j]);
+                attroff(A_BOLD);                       
+            } else if (explored_map[i][j] == '!') {
+                mvaddstr(i, j, dagger);
+            } else if (explored_map[i][j] == '(') {
+                mvaddstr(i, j, sword);
+            } else if (explored_map[i][j] == ')') {
+                mvaddstr(i, j, normal_arrow);
+            } else if (explored_map[i][j] == '\\') {
+                mvaddstr(i, j, magic_wand);
+            } else if (explored_map[i][j] == ',') {
+                attron(COLOR_PAIR(8));
+                mvprintw(i, j, "%c", explored_map[i][j]);
+                attroff(COLOR_PAIR(8));
+            } else if (explored_map[i][j] == '~') {
+                attron(COLOR_PAIR(10));
+                mvprintw(i, j, "%c", explored_map[i][j]);
+                attroff(COLOR_PAIR(10));                
+            } else if (explored_map[i][j] == 'g') {
+                mvaddstr(i, j, black_gold);
+            } else if (explored_map[i][j] == 'K') {
+                attron(COLOR_PAIR(8));
+                mvaddstr(i, j, ancient_key);
+                attroff(COLOR_PAIR(8));
+            } else if (explored_map[i][j] == 's') {
+                mvaddstr(i, j, speed);
+            } else if (explored_map[i][j] == 'd') {
+                mvaddstr(i, j, damage);
+            } else if (explored_map[i][j] == 'h') {
+                mvaddstr(i, j, health);
+            } else if (explored_map[i][j] == 'f') {
+                mvaddstr(i, j, food_norm);
+            } else if (explored_map[i][j] == 'a') {
+                mvaddstr(i, j, food_sup);
+            } else if (explored_map[i][j] == 'j') {
+                mvaddstr(i, j, food_mag);
+            }
+            else {
+                mvprintw(i, j, "%c", explored_map[i][j]);
+            }
+        }
+    }
+    refresh();
+}
 
-// void visibility (Room *rooms, int x, int y) {
-//     //show visible rooms
-// }
 
-
-int start_game (int color, char username[], int continued) {
+int start_game (int color, char username[], int continued, int level) {
     setlocale(LC_ALL, "");
     srand(time(0));
     initscr();
@@ -2102,7 +2252,7 @@ int start_game (int color, char username[], int continued) {
     int hungerLevel = MAX_HUNGER;
     int speed_effect_count = 0;
     int damage_effect_count = 0;
-    player.life = LIFE;
+    player.life = LIFE * level;
     char treasure_room_filepath[50];
     int win = 0, lost = 0;
     int count_move = 0;
@@ -2110,8 +2260,9 @@ int start_game (int color, char username[], int continued) {
 
     for (int i = 0; i < 3; i++) {
         food_counts[i] = 0;
-        time_food[i] = 0;
+        time_food[i] = -1;
     }
+    
 
     sprintf(treasure_room_filepath, "Treasure_Room.txt");
     FILE *fptr = fopen(treasure_room_filepath, "r");
@@ -2128,29 +2279,39 @@ int start_game (int color, char username[], int continued) {
     }
 
     for (int floor = 1; floor <= 4;  floor++) {
+        if (floor > 1) {
+            attron(A_REVERSE);
+            mvprintw(0, COLS / 2 - 10, "You entered next floor!");
+            attroff(A_REVERSE);
+        }
+        clear();
         int hunger_count = 0;
         int repeat = 0;
         char prev_dir[2];
+        int next = 0;
+        int prev = 0;
+        int is_in_enchant_room = 0;
+        int count_enchant = 0;
 
-        Room rooms[MAX_ROOMS];
+        Room rooms[12];
         memset(rooms, 0, sizeof(rooms));
         int num_rooms = 0;
         char file_name1[50], file_name2[50];
         char demons2[LINES][COLS];
-        char traps[LINES][COLS];
         char fallen_weapons[LINES][COLS];
         char unvisible_door[LINES][COLS];
-
+        char explored_map[LINES][COLS];
 
         for (int i = 0; i < LINES; i++) {
             for (int j = 0; j < COLS; j++) {
-                traps[i][j] = 0;
+                explored_map[i][j] = ' ';
             }
         }
 
         
         sprintf(file_name1, "rooms_info_%d.txt", floor);
-        read_room_info(file_name1, rooms, &num_rooms, traps, unvisible_door);
+        read_room_info(file_name1, rooms, &num_rooms, unvisible_door);
+
         demon_properties(rooms, num_rooms);
 
 
@@ -2174,11 +2335,11 @@ int start_game (int color, char username[], int continued) {
 
         //display_map_with_unicode(map);
 
-        for (int i = 0; i < LINES; i++) {
-            for (int j = 0; j < COLS; j++) {
-                mvaddch(i + 2, j, map[i + 2][j]);
-            }
-        }
+        // for (int i = 0; i < LINES; i++) {
+        //     for (int j = 0; j < COLS; j++) {
+        //         mvaddch(i + 2, j, map[i + 2][j]);
+        //     }
+        // }
 
         int valid = 0;
         int x, y;
@@ -2191,7 +2352,9 @@ int start_game (int color, char username[], int continued) {
             }
         }
 
-        mvprintw(y, x, "@");
+        attron(COLOR_PAIR(color));
+        mvprintw(y, x, "\U0001FBC6");
+        attroff(COLOR_PAIR(color));
         temp_map[y][x] = map[y][x]; 
         refresh();
 
@@ -2207,42 +2370,54 @@ int start_game (int color, char username[], int continued) {
         int ch;
         int door_password;
         int life_decrease = 0;
-
+    
         while ((ch = getch()) != 'q') { // 'q' for quit
-            //visibility(rooms, x, y, num_rooms, map);
-            color_map(map, pass_doors_locked);
+            visibility(rooms, x, y, num_rooms, map, explored_map);
+            print_explored_rooms(rooms, num_rooms, map, x, y, pass_doors_locked, explored_map);
+            //color(map, pass_doors_locked);
             if (ch == 'f') { //continuous movements
                 ch = getch();
-                move_player_continuously(temp_map, map, traps, &x, &y, ch, &player, current_floor, pass_doors_locked);
+                move_player_continuously(temp_map, map, &x, &y, ch, &player, current_floor, pass_doors_locked);
             } else if (ch == 'i') {
                 ScreenChar **screendata = NULL;
                 save_screen(&screendata, &LINES, &COLS);
                 weapon_menu(stdscr, COLS, LINES, &wpn, 5, player);
                 display_screen(screendata, LINES, COLS);
 
-            }  else if (ch == 'e') {
+            } else if (ch == 'e') {
                 ScreenChar **screendata = NULL;
                 save_screen(&screendata, &LINES, &COLS);
-                int food_num = food_menu(stdscr, COLS, LINES, 4, player); // Food selection menu
+                int food_num = food_menu(stdscr, COLS, LINES, 3, player); // Food selection menu
+                display_screen(screendata, LINES, COLS);
+                getch();
 
-                if (food_num > 0 && food_counts[food_num - 1] > 0) {
-                    food_counts[food_num - 1]--; // Decrease selected food count
+                if (food_counts[food_num] > 0) {
+                    food_counts[food_num]--; // Decrease selected food count
                     player.food--;
 
                     // Apply effects based on food type
                     if (food_num == 1) {
-                        player.life = LIFE;
+                        player.life = LIFE * level;
                         damage_effect_count = 1;
                     } else if (food_num == 2) {
-                        player.life = LIFE;
+                        player.life = LIFE * level;
                         speed_effect_count = 1;
                     } else if (food_num == 0) {
-                        player.life = LIFE;
+                        int chance = get_random_number(1, 10);
+                        if (chance >= 0 && chance <= 8) {
+                            player.life = LIFE * level;
+                        } else {
+
+                            player.life--;
+                            attron(COLOR_PAIR(100));
+                            mvprintw(0, COLS / 2 - 10, "%30s", "Oops! you ate rotten food!");
+                            attron(COLOR_PAIR(100));
+                        }
                     }
 
                     hungerLevel = MAX_HUNGER; // Reset hunger
+                    refresh();
                 }
-                display_screen(screendata, LINES, COLS);
 
             } else if (speed_effect_count) {
                 if (speed_effect_count < 10) {
@@ -2252,7 +2427,6 @@ int start_game (int color, char username[], int continued) {
                 }
                 
             }
-
 
             if (damage_effect_count > 0) {
                 if (damage_effect_count < 10) {
@@ -2281,7 +2455,7 @@ int start_game (int color, char username[], int continued) {
                 spell_count[spell_num]--; // used
 
                 if (spell_life[spell_num] == 2) {
-                    player.life = LIFE; // full life
+                    player.life = LIFE * level; // full life
                 } else if (spell_speed[spell_num] == 2) {
                     player.velocity = 2;
                     speed_effect_count = 1;
@@ -2292,121 +2466,127 @@ int start_game (int color, char username[], int continued) {
 
                 display_screen(screendata, LINES, COLS);
                 
-
-            } else if (ch == 's') { // Save the game
-                char map_filepath[100];
-                char username[20] = "Selma"; // Adjust size as needed
-                snprintf(map_filepath, sizeof(map_filepath), "/home/selma/Desktop/Project/Phase1/Users' Info/%s/map.txt", username);
-                FILE *file1 = fopen(map_filepath, "w");
-                
-                for (int i = 0; i < LINES; i++) {
-                    for (int j = 0; j < COLS; j++) {
-                        fputc(map[i][j], file1);
-                    }
-                }
-                fclose(file1);
-                
+            } if (ch == 's') { // Save the game
                 int score, gold, n_games; 
                 char experience[50];
                 char info_filepath[100];
                 snprintf(info_filepath, sizeof(info_filepath), "/home/selma/Desktop/Project/Phase1/Users' Info/%s/info.txt", username);
                 FILE *file2 = fopen(info_filepath, "r");
-                fscanf(file2, "%s %d %d %d %63[^\n]", username, &score, &gold, &n_games, experience);
-                score += player.score;
-                gold += player.gold;
-                n_games += player.number_of_finished_games;
-                fclose(file2);
+                if (file2 != NULL) {
+                    fscanf(file2, "%s %d %d %d %49[^\n]", username, &score, &gold, &n_games, experience);
+                    score += player.score;
+                    gold += player.gold;
+                    n_games += player.number_of_finished_games;
+                    fclose(file2);
 
-                FILE *file3 = fopen(info_filepath, "w");
+                    FILE *file3 = fopen(info_filepath, "w");
+                    if (file3 != NULL) {
+                        fprintf(file3, "%s %d %d %d %s", username, score, gold, n_games + 1, experience);
+                        fclose(file3);
+                    }
+                }
 
-                fprintf(file3, "%s %d %d %d %s", username, score, gold, n_games, experience);
-                fclose(file3);
+                char file_name1[100];
+                snprintf(file_name1, sizeof(file_name1), "rooms_info_%d.txt", current_floor);
+                FILE *file4 = fopen(file_name1, "w");
 
-                clear();
-                mvprintw(LINES / 2, COLS / 2 - 20, "Game saved successfully!");
-                refresh();
-                getch();
-                return 0;
-            
-            
+                if (file4 != NULL) {
+                    for (int i = 0; i < num_rooms; i++) {
+                        fprintf(file4, "Room %d:\n", rooms[i].room_number);
+                        fprintf(file4, "Center: (%d, %d)\n", rooms[i].center.y, rooms[i].center.x);
+                        fprintf(file4, "Dimensions: %dx%d\n", rooms[i].dimensions.y, rooms[i].dimensions.x);
+                        fprintf(file4, "Type: %d\n", rooms[i].type);
+                        fprintf(file4, "Visibility: %d\n", rooms[i].visibility); // Add debug print}
+                        fprintf(file4, "Demon: %d (%d, %d)\n", rooms[i].demon.type, rooms[i].demon.position.y, rooms[i].demon.position.x);
+                        fprintf(file4, "\n");
+                        refresh();
+                    }
+
+                    fclose(file4);
+
+                    clear();
+                    mvprintw(LINES / 2, COLS / 2 - 20, "Game saved successfully!");
+                    refresh();
+                    getch();
+                }
+                break;
 
             //weapon changing
             } else if (ch == 'w') {
                 player.weapon_type = 0;
-                attron(A_BOLD);
-                mvprintw(0, COLS / 2 - 30, "Weapon safely placed back in your bag!                                             ");
-                attroff(A_BOLD);
+                attron(COLOR_PAIR(200));
+                mvprintw(0, COLS / 2 - 35, "%50s", "Weapon safely placed back in your bag!");
+                attroff(COLOR_PAIR(200));
             } else if (ch == '1') {
                 if (!player.weapon_type) {
                     player.weapon_type = 1;
-                    attron(A_BOLD);
-                    mvprintw(0, COLS / 2 - 30, "Successfully switched to Mace!                                                    ");
-                    attroff(A_BOLD);
+                    attron(COLOR_PAIR(200));
+                    mvprintw(0, COLS / 2 - 35, "%50s","Successfully switched to Mace!");
+                    attroff(COLOR_PAIR(200));
                 } else {
-                    attron(A_BOLD);
-                    mvprintw(0, COLS / 2 - 30, "Please place your current weapon back in your bag before switching to another one!");
-                    attroff(A_BOLD);
+                    attron(COLOR_PAIR(200));
+                    mvprintw(0, COLS / 2 - 35, "%50s","Please place your current weapon back in your bag before switching to another one!");
+                    attroff(COLOR_PAIR(200));
                 }
             } else if (ch == '2') {
                 if (!player.weapon_type) {
                     player.weapon_type = 2;
-                    attron(A_BOLD);
-                    mvprintw(0, COLS / 2 - 30, "Successfully switched to Sword!                                                   ");
-                    attroff(A_BOLD);
+                    attron(COLOR_PAIR(200));
+                    mvprintw(0, COLS / 2 - 35, "%50s","Successfully switched to Sword!");
+                    attroff(COLOR_PAIR(200));
                 } else {
                     attron(A_BOLD);
-                    mvprintw(0, COLS / 2 - 30, "Please place your current weapon back in your bag before switching to another one!");
-                    attroff(A_BOLD);
+                    mvprintw(0, COLS / 2 - 35,"%50s","Please place your current weapon back in your bag before switching to another one!");
+                    attroff(COLOR_PAIR(200));
                 }
             } else if (ch == '3') {
                 if (!player.weapon_type) {
                     player.weapon_type = 3;
-                    attron(A_BOLD);
-                    mvprintw(0, COLS / 2 - 30, "Successfully switched to Normal Arrow!                                            ");
-                    attroff(A_BOLD);
+                    attron(COLOR_PAIR(200));
+                    mvprintw(0, COLS / 2 - 35, "%50s","Successfully switched to Normal Arrow!");
+                    attroff(COLOR_PAIR(200));
                 } else {
-                    attron(A_BOLD);
-                    mvprintw(0, COLS / 2 - 30, "Please place your current weapon back in your bag before switching to another one!");
-                    attroff(A_BOLD);
+                    attron(COLOR_PAIR(200));
+                    mvprintw(0, COLS / 2 - 35, "Please place your current weapon back in your bag before switching to another one!");
+                    attroff(COLOR_PAIR(200));
                 }
             } else if (ch == '4') {
                 if (!player.weapon_type) {
                     player.weapon_type = 4;
-                    attron(A_BOLD);
-                    mvprintw(0, COLS / 2 - 30, "Successfully switched to Dagger!                                                  ");
-                    attroff(A_BOLD);
+                    attron(COLOR_PAIR(200));
+                    mvprintw(0, COLS / 2 - 35, "%50s","Successfully switched to Dagger!");
+                    attroff(COLOR_PAIR(200));
                 } else {
-                    attron(A_BOLD);
-                    mvprintw(0, COLS / 2 - 30, "Please place your current weapon back in your bag before switching to another one!");
-                    attroff(A_BOLD);
+                    attron(COLOR_PAIR(200));
+                    mvprintw(0, COLS / 2 - 35, "%50s","Please place your current weapon back in your bag before switching to another one!");
+                    attroff(COLOR_PAIR(200));
                 }
             } else if (ch == '5') {
                 if (!player.weapon_type) {
                     player.weapon_type = 5;
-                    attron(A_BOLD);
-                    mvprintw(0, COLS / 2 - 30, "Successfully switched to Magic Wand!                                              ");
-                    attroff(A_BOLD);
+                    attron(COLOR_PAIR(200));
+                    mvprintw(0, COLS / 2 - 35, "%50s","Successfully switched to Magic Wand!");
+                    attroff(COLOR_PAIR(200));
                 } else {
-                    attron(A_BOLD);
-                    mvprintw(0, COLS / 2 - 30, "Please place your current weapon back in your bag before switching to another one!");
-                    attroff(A_BOLD);
+                    attron(COLOR_PAIR(200));
+                    mvprintw(0, COLS / 2 - 35, "%50s", "Please place your current weapon back in your bag before switching to another one!");
+                    attroff(COLOR_PAIR(200));
                 }
             }
-            
 
             // Fight logic for space key press
             else if (ch == ' ') {
                 int i = find_room(x, y, map, num_rooms, rooms);
                 if (i != -1) {
-                    if (player.weapon_type == 1) { // Mace
+                    if (player.weapon_type == 1 && player.mace > 0) { // Mace
                         handle_short_range_weapon(x, y, &player.mace, 5, rooms, i, 0, speed_effect_count);
-                    } else if (player.weapon_type == 2) { // Sword
+                    } else if (player.weapon_type == 2 && player.sword > 0) { // Sword
                         handle_short_range_weapon(x, y, &player.sword, 10, rooms, i, 1, speed_effect_count);
-                    } else if (player.weapon_type == 3) { // Normal Arrow
+                    } else if (player.weapon_type == 3 && player.normal_arrow > 0) { // Normal Arrow
                         handle_long_range_weapon(x, y, map, rooms, i, &player, 5, 5, ')', prev_dir, 0, fallen_weapons, 0, speed_effect_count);
-                    } else if (player.weapon_type == 4) { // Dagger
+                    } else if (player.weapon_type == 4 && player.dagger > 0) { // Dagger
                         handle_long_range_weapon(x, y, map, rooms, i, &player, 12, 5, '!', prev_dir, 0, fallen_weapons, 0, speed_effect_count);
-                    } else if (player.weapon_type == 5) { // Magic Wand
+                    } else if (player.weapon_type == 5 && player.magic_wand > 0) { // Magic Wand
                         handle_long_range_weapon(x, y, map, rooms, i, &player, 15, 10, '\\', prev_dir, 0, fallen_weapons, 1, speed_effect_count);
                     }
                 }
@@ -2414,15 +2594,15 @@ int start_game (int color, char username[], int continued) {
             } else if (ch == 'a' && repeat == 1) {
                 int i = find_room(x, y, map, num_rooms, rooms);
                 if (i != -1) {
-                    if (player.weapon_type == 1) { // Mace
+                    if (player.weapon_type == 1 && player.mace > 0) { // Mace
                         handle_short_range_weapon(x, y, &player.mace, 5, rooms, i, 0, speed_effect_count);
-                    } else if (player.weapon_type == 2) { // Sword
+                    } else if (player.weapon_type == 2 && player.sword > 0) { // Sword
                         handle_short_range_weapon(x, y, &player.sword, 10, rooms, i, 1, speed_effect_count);
-                    } else if (player.weapon_type == 3) { // Normal Arrow
+                    } else if (player.weapon_type == 3 && player.normal_arrow > 0) { // Normal Arrow
                         handle_long_range_weapon(x, y, map, rooms, i, &player, 5, 5, ')', prev_dir, 1, fallen_weapons, 0, speed_effect_count);
-                    } else if (player.weapon_type == 4) { // Dagger
+                    } else if (player.weapon_type == 4 && player.dagger > 0) { // Dagger
                         handle_long_range_weapon(x, y, map, rooms, i, &player, 12, 5, '!', prev_dir, 1, fallen_weapons, 0, speed_effect_count);
-                    } else if (player.weapon_type == 5) { // Magic Wand
+                    } else if (player.weapon_type == 5 && player.magic_wand > 0) { // Magic Wand
                         handle_long_range_weapon(x, y, map, rooms, i, &player, 15, 10, '\\', prev_dir, 1, fallen_weapons, 1, speed_effect_count);
                     }
                 }
@@ -2437,13 +2617,24 @@ int start_game (int color, char username[], int continued) {
             }
 
             else { //single step movements
-                move_player(current_music, username, rooms, num_rooms, next, prev, &door_password, temp_map, map, traps, &x, &y, ch, &player, current_floor, pass_doors_locked, fallen_weapons, speed_effect_count, treasure_room_map, unvisible_door, &wpn, &lost);
+                move_player(current_music, username, rooms, num_rooms, &next, &prev, &door_password, temp_map, map, &x, &y, ch, &player, current_floor, pass_doors_locked, fallen_weapons, speed_effect_count, treasure_room_map, unvisible_door, &wpn, &lost, &is_in_enchant_room, color);
                 if (next == 1) {
                     floor++;
                     break;
                 } else if (prev == 1) {
                     floor--;
                     break;
+                }
+                life_decrease++;
+
+                if (is_in_enchant_room) {
+                    count_enchant++;
+                } else {
+                    count_enchant = 0;
+                }
+
+                if (count_enchant == 10) {
+                    player.life--;
                 }
             }
 
@@ -2460,17 +2651,20 @@ int start_game (int color, char username[], int continued) {
                     mvprintw(LINES - 1, COLS - 90, "%s Life: %10d", type_dem[rooms[current_room].demon.type - 1], rooms[current_room].demon.life);
                     attroff(COLOR_PAIR(1) | A_REVERSE);
 
-                    // if (type_dem[rooms[current_room].demon.type - 1] == 'G' || type_dem[rooms[current_room].demon.type - 1] == 'U') {
-                    //     limited_move = 1;
-                    //     count_move++;
-                    // }
+                    if (rooms[current_room].demon.type == 2 || rooms[current_room].demon.type == 4) {
+                        count_move++;
+                    } else {
+                        count_move = 0;
+                    }
                     demon(map, rooms, x, y, current_room, &player, count_move);
                     refresh();
                 }
                 rooms[current_room].visibility = 1;
             }
 
-            mvprintw(y, x, "@");
+            attron(COLOR_PAIR(color));
+            mvprintw(y, x, "\U0001FBC6");
+            attroff(COLOR_PAIR(color));
             attron(COLOR_PAIR(2));
             mvprintw(LINES - 1, 1, "Life: %d      Food: %d      Gold: %d      Weapons: %d     Health: %d      Master key: %d",
                     player.life, player.food, player.gold, player.mace + player.dagger+ player.magic_wand+ player.normal_arrow+ player.sword, player.health, player.masterkey);
@@ -2487,12 +2681,12 @@ int start_game (int color, char username[], int continued) {
                 life_decrease = 0;
             }
 
-            for (int n = 0; n < 3; n++) {
-                if (time_food[n] > FOOD_CONVERSION_RATE) {
-                    food_counts[n]--;
-                    food_counts[0]++;
-                }
-            }
+            // for (int n = 0; n < 3; n++) {
+            //     if (time_food[n] > FOOD_CONVERSION_RATE) {
+            //         food_counts[n]--;
+            //         food_counts[0]++;
+            //     }
+            // }
             
             if (lost) {
                 clear();
@@ -2507,7 +2701,6 @@ int start_game (int color, char username[], int continued) {
     }
     endwin();
     return 0;
-
 }
 
 
