@@ -82,18 +82,18 @@ int display_game_menu(char username[]) {
     WINDOW *win = newwin(LINES, COLS, 0, 0);
     refresh();
 
-    char *choices1[] = {"Profile", "Start a New Game", "Continue the Last Game", "Score's Table", "Settings", "Exit"};
-    char *choices2[] = {"Easy", "Medium", "Hard", "Back"};
-    char *choices3[] = {"White", "Blue", "Green", "Red", "Yellow", "Magenta", "Cyan", "Back"};
-    char *choices4[] = {"Music 1", "Music 2", "Music 3", "Music 4", "Turn Off", "Back"};
-    char *choices6[] = {"Game Difficulty Level", "Character Appearance", "Music", "Back"};
+    char *choices1[] = {"\U0001F464 Profile \U0001F464", "\U0001F9ED Start a New Game \U0001F9ED", "\U0001F4CD Continue the Last Game \U0001F4CD", "\U0001F3C6 Score's Table \U0001F3C6", " \U00002699 Settings \U00002699", "\U0001F6AA Exit \U0001F6AA"};
+    char *choices2[] = {"\U0001F7E2 Easy \U0001F7E2", "\U0001F7E0 Medium \U0001F7E0", "\U0001F534 Hard \U0001F534", "\U000021A9 Back \U000021A9"};
+    char *choices3[] = {"White", "Blue", "Green", "Red", "Yellow", "Magenta", "Cyan", "\U000021A9 Back \U000021A9"};
+    char *choices4[] = {"\U0001F3B5 Track 1 \U0001F3B5", "\U0001F3B5 Track 2 \U0001F3B5", "\U0001F3B5 Track 3 \U0001F3B5", "\U0001F3B5 Track 4 \U0001F3B5", "\U0001F507 Turn Off \U0001F507", "\U000021A9 Back \U000021A9"};
+    char *choices6[] = {"\U0001F4C8 Game Difficulty Level \U0001F4C8", "\U0001F3A8 Character Appearance \U0001F3A8", "\U0001F3A7 Music \U0001F3A7", "\U000021A9 Back \U000021A9"};
     
-    char *title1 = "~~~ Game Menu ~~~";
-    char *title2 = "-- Game Levels --";
-    char *title3 = "@ Character Appearance @";
-    char *title4 = "^ Music ^";
-    char *title5 = "* Profile *";
-    char *title6 = "# Settings #";
+    char *title1 = "\U0001F3AE Game Menu \U0001F3AE";
+    char *title2 = "\U0001F4C8 Game Levels \U0001F4C8";
+    char *title3 = "\U0001F3A8 Character Appearance \U0001F3A8";
+    char *title4 = "\U0001F3BC Music \U0001D122";
+    char *title5 = "\U0001F464 Profile \U0001F464";
+    char *title6 = "\U00002699 Settings \U00002699";
 
     Game game = {0};
     Mix_Music* current_music = NULL;
@@ -136,7 +136,7 @@ int display_game_menu(char username[]) {
 
                 do {
                     choice0 = menu(win, COLS, LINES, choices5, 4, "Profile");
-                } while (choice0 != 3);  // Correct index to match "Back" being the 4th option (index 3)
+                } while (choice0 != 3);
                 break;
             }
 
@@ -145,8 +145,8 @@ int display_game_menu(char username[]) {
                 mvwprintw(win, LINES / 2, (COLS - 25) / 2, "Starting a New Game...");
                 refresh();
                 getch();
-                map_generator();
-                start_game(game.color, username, 0);
+                map_generator(game.level);
+                start_game(game.color, username, 0, game.level);
                 break;
 
             case 2:  // Continue the Last Game
@@ -154,7 +154,7 @@ int display_game_menu(char username[]) {
                 mvwprintw(win, LINES / 2, (COLS - 25) / 2, "Loading the Last Game...");
                 refresh();
                 getch();
-                start_game(game.color, username, 1);
+                start_game(game.color, username, 1, game.level);
                 break;
 
             case 3:// Scores Table
@@ -181,13 +181,13 @@ int display_game_menu(char username[]) {
                                         if (difficulty == 3) break;  // "Back" in difficulty
                                         switch (difficulty) {
                                             case 0: 
-                                                game.level = 1; // easy
+                                                game.level = 3; // easy
                                                 break;
                                             case 1:
                                                 game.level = 2; // medium
                                                 break;
                                             case 2:
-                                                game.level = 3; // hard
+                                                game.level = 1; // hard
                                                 break;
                                         }
                                     } while (difficulty != 3); // back to settings
@@ -284,20 +284,17 @@ int display_game_menu(char username[]) {
                 choice1 = 5;
                 break;
         }
-    } while (choice1 != 5);  // Exit if user selects "Exit" from the main menu
+    } while (choice1 != 5);
 
 
-    // Cleanup and close everything properly
     if (current_music != NULL) {
         Mix_HaltMusic();
         Mix_FreeMusic(current_music);
     }
     Mix_CloseAudio();
     SDL_Quit();
-    endwin();  // Close ncurses
+    endwin();
 }
-
-
 
 
 #endif
